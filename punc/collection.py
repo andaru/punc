@@ -34,6 +34,14 @@ class Collection(object):
     """A PUNC Network Configuration Collection."""
 
     def __init__(self, name, config, path='./'):
+        """Initialiser.
+
+        Args:
+          name: A string, the collection name.
+          config: A dict, the collection config rooted at
+            the name of the collection (with a 'recipes' sub-element).
+          path: The base path to use for this collection.
+        """
         self.name = name
         self._devices = {}
         self._errors = []
@@ -42,6 +50,14 @@ class Collection(object):
         self.path = path
         self._parse_config(config)
 
+    def _fix_path(self, path):
+        if '..' in path:
+            logging.error('Double-dot in path. Possible security violation. '
+                          'Offending path is: %r', path)
+            return './'
+        else:
+            return path
+        
     def _parse_config(self, config):
         if not config.get('recipes'):
             raise InvalidCollectionError(
@@ -49,10 +65,11 @@ class Collection(object):
         for recipe in config.get('recipes'):
             if not isinstance(recipe, dict):
                 continue
+            path = self._fix_path(recipe.get('path', self.path))
             self.recipes.append(Recipe(regexp=recipe.get('regexp'),
                                    vendor=recipe.get('vendor'),
                                    ruleset=recipe.get('ruleset'),
-                                   path=recipe.get('path', self.path)))
+                                   path=path))
 
     @property
     def results(self):
