@@ -5,6 +5,14 @@ import logging
 import yaml
 
 
+class Error(Exception):
+    pass
+
+
+class UnknownConfigurationFileFormatError(Error):
+    """The configuration file extension was unknown."""
+
+
 class Configuration(object):
     """PUNC's abstract configuration object."""
 
@@ -75,7 +83,7 @@ def load_config_file(filename):
     if format_method is not None:
         return format_method(filename)
     else:
-        raise errors.UnknownConfigurationFileFormatError(
+        raise UnknownConfigurationFileFormatError(
             'Config file %s not supported; supported extensions: %s' %
             (filename, ', '.join(CONFIG_FILE_EXTENSIONS.keys())))
 

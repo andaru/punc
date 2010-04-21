@@ -11,4 +11,4 @@ the same directory (which is the default behaviour).
 
 File               Purpose
 ------------------ ------------------------------------------
-punc.yaml.standard Emulate a RANCID tree and collection style
+punc-standard.yaml Emulate a RANCID tree and collection style
