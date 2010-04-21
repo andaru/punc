@@ -1,0 +1,20 @@
+output_dir: /Users/afort/Projects/punc-output
+collections:
+  default:
+    rules:
+      - vendor: cisco
+        regexp: "^[abc]r.*"
+        ruleset: cisco
+        path: cisco/
+      - vendor: juniper
+        regexp: "^[abc]r.*"
+        ruleset: juniper
+        path: juniper/
+      - vendor: timetra
+        regexp: "^[abc]r.*"
+        ruleset: timetra
+        path: timetra/
+      - vendor: telco
+        regexp: "^[abc]r.*"
+        ruleset: telco
+        path: telco/
