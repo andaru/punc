@@ -1,20 +1,20 @@
-output_dir: /Users/afort/Projects/punc-output
+base_path: /tmp/punc-workdir/
 collections:
   default:
-    rules:
+    recipes:
       - vendor: cisco
-        regexp: "^[abc]r.*"
+        regexp: ".*"
         ruleset: cisco
         path: cisco/
       - vendor: juniper
-        regexp: "^[abc]r.*"
+        regexp: ".*"
         ruleset: juniper
         path: juniper/
       - vendor: timetra
-        regexp: "^[abc]r.*"
+        regexp: ".*"
         ruleset: timetra
         path: timetra/
       - vendor: telco
-        regexp: "^[abc]r.*"
+        regexp: ".*"
         ruleset: telco
         path: telco/

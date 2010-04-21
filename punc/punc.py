@@ -133,8 +133,8 @@ def main(argv=None):
 
     start = time.time()
     logging.info('Starting collection.')
-    output_path = config_dict.get('output_path', './tmpdata')
-    c = collector.Collector(nc, path=output_path)
+    base_path = config_dict.get('base_path', './tmpdata')
+    c = collector.Collector(nc, path=base_path)
     collections = config_dict.get('collections')
     for name, collection in collections.iteritems():
         collection_stats = c.collect_config(collection, name=name)

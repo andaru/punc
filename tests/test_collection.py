@@ -33,7 +33,7 @@ class CollectionTest(unittest.TestCase):
     def setUp(self):
         self._collection1 = punc.collection.Collection(
             'test1',
-            {'rules': [{'vendor': 'cisco',
+            {'recipes': [{'vendor': 'cisco',
                         'ruleset': 'cisco',
                         'regexp': r'.*',
                         'path': 'cisco'},
@@ -45,7 +45,7 @@ class CollectionTest(unittest.TestCase):
             path='./basepath')
 
     def testParseConfig(self):
-        self.assertEqual(len(self._collection1.rules), 2)
+        self.assertEqual(len(self._collection1.recipes), 2)
 
     def testCollect(self):
         nc = MockNotchConnection()
