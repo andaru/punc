@@ -1,8 +1,9 @@
-
 from rulesets import cisco
+from rulesets import telco
 
 
 rulesets = {'cisco': cisco.IosRuleSet,
+            'telco': telco.TelcoRuleSet,
             }
 
 
