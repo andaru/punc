@@ -81,9 +81,11 @@ class Collection(object):
         logging.info('Collection %s started', self.name)
         reqs = []
         start = time.time()
+        self._devices = {}
         for recipe in self.recipes:
             reg = recipe.regexp
             devices = nc.devices_info(reg)
+            self._devices.update(devices)
             notch_requests = self._get_requests(recipe, *devices.keys())
             nc.exec_requests(notch_requests)
         
@@ -102,8 +104,12 @@ class Collection(object):
 
         reqs = []
         for action in ruleset.actions:
-
             for device in devices:
+                d = self._devices.get(device)
+                if d:
+                    device_vendor = d.get('device_type')
+                if device_vendor != recipe.vendor:
+                    continue
                 args = copy.copy(action.args)
                 args['device_name'] = device
                 r = notch.client.Request(action.notch_method, args,
