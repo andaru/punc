@@ -124,8 +124,13 @@ class Collection(object):
         recipe, action = args
         device_name = r.arguments.get('device_name')
         if r.error is not None:
-            logging.debug('Got an error: %r', r.error)
-            recipe.errors.append((device_name, action, str(r.error)))
+            if r.error.args[1].startswith('ERROR '):
+                error_msg = r.error.args[1].split(':', 1)[1].strip()
+            else:
+                error_msg = str(r.error)
+            logging.error('%s: %s: %s',
+                          device_name, r.error.args[0], error_msg)
+            recipe.errors.append((device_name, action, error_msg))
         else:
             result = r.result
             try:
