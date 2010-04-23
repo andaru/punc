@@ -1,9 +1,11 @@
 from rulesets import cisco
 from rulesets import telco
+from rulesets import timetra
 
 
 rulesets = {'cisco': cisco.IosRuleSet,
             'telco': telco.TelcoRuleSet,
+            'timetra': timetra.TimetraRuleSet,
             }
 
 
