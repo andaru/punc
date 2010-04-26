@@ -125,14 +125,19 @@ class Collection(object):
                 d = self._devices.get(device)
                 if d:
                     device_vendor = d.get('device_type')
+                else:
+                    # Effectively skip this device in the following check.
+                    device_vendor = None
+
                 if device_vendor != recipe.vendor:
                     continue
-                args = copy.copy(action.args)
-                args['device_name'] = device
-                r = notch.client.Request(action.notch_method, args,
-                                         callback=self._notch_callback,
-                                         callback_args=(recipe, action))
-                reqs.append(r)
+                else:
+                    args = copy.copy(action.args)
+                    args['device_name'] = device
+                    r = notch.client.Request(action.notch_method, args,
+                                             callback=self._notch_callback,
+                                             callback_args=(recipe, action))
+                    reqs.append(r)
 
         logging.debug('[%s] %d requests for %r',
                       self.name, len(reqs), recipe)

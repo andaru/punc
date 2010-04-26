@@ -18,7 +18,6 @@ The collector provides user interface code with an API for creating
 collection activities and triggering them.
 """
 
-
 import collections
 import logging
 import operator
@@ -27,8 +26,6 @@ import os
 import re
 import threading
 import time
-
-import eventlet
 
 import notch.client
 
@@ -50,14 +47,7 @@ CollectorFilter = collections.namedtuple('CollectorFilter',
 
 
 class Collector(object):
-    """The PUNC Collector.
-
-    The collector can be sent work orders via the collect_for,
-    collect_collection and collect_all methods. It operates a
-    queue listener greenthread (via eventlet) that means you must
-    explicitly call .stop() (via a try/finally, perhaps) on this
-    instance when you're done.
-    """
+    """The PUNC Collector."""
     # How many seconds to sleep for when the queue is empty. It also
     # sets the minimum latency when the queue is empty. As this is
     # used to encourage cooperative greentasking, the value can be
@@ -67,7 +57,7 @@ class Collector(object):
     # The status_event stop signal.
     STOP_EVENT = 'STOP'
 
-    def __init__(self, notch_client, path='./tmpdata'):
+    def __init__(self, notch_client, path='./punc-repo'):
         self._lock = threading.Lock()
         self._nc = notch_client
         self._errors = []
@@ -75,8 +65,6 @@ class Collector(object):
         self._orders = collections.deque()
         self.path = path
         self.repo_path = None
-        self.request_q = eventlet.queue.LightQueue()
-        self.status_event = eventlet.event.Event()
         self.repo = None
 
     @property
@@ -90,10 +78,12 @@ class Collector(object):
 
     def collect_config(self, config, filter=None, name=None):
         """Collects all recipes in the supplied master configuration."""
-        self._lock.acquire()
+        if not self._lock.acquire(False):
+            logging.debug('[%s] waiting for collection lock', name)
+            self._lock.acquire()
         try:
             self.path = config.get('base_path', self.path)
-            self.repo_path = config.get('repo_path', None)
+            self.repo_path = config.get('master_repo_path', None)
             self.repo = rc_hg.MercurialRevisionControl(self.repo_path,
                                                        self.path)
             collections = config.get('collections', {})
@@ -125,33 +115,6 @@ class Collector(object):
     def commit_repository(self, message=None):
         self.repo.addremove()
         self.repo.commit(message=message)
-
-    def collect(self, device, regexp=False, collection_name=None):
-        """Collects for a device or a regexp of devices.
-
-        Collects for either all collections, or a specific one (if
-        collection_name is supplied).
-
-        Args:
-          device: A string, either a single device name, or if regexp=True,
-            a regular expression matching device names.
-          regexp: A boolean, if True, treat device as a regualr expression.
-          collection_name: A string, a collection name to collect for the
-            given devices.
-        """
-        # Scan the full configurations, replacing all regexes with the
-        # device name, instead.
-        c = {}
-        for key, collection in self.collections.items():
-            for rule in collection['rules']:
-                if rule.get('regexp'):
-                    if not regexp:
-                        rule['regexp'] = re.escape(device)
-                    else:
-                        rule['regexp'] = device
-            c[key] = collection
-        # Add to the queue.
-        self.request_q.put((key, c))
 
     def _get_header(self, rule):       
         return ruleset_factory.get_ruleset_with_name(rule.ruleset).header

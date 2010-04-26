@@ -1,4 +1,5 @@
 base_path: /tmp/punc-workdir/
+master_repo_path: /tmp/punc-master/
 collections:
   default:
     recipes:

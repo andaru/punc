@@ -102,9 +102,6 @@ def main(argv=None):
     start = time.time()
     argv = argv or sys.argv
     options, arguments = get_options()
-    filter = collector.CollectorFilter(collection=options.collection,
-                                       device=options.device,
-                                       regexp=options.regexp)
     prettify_logging(options)
 
     # Read the configuration file.
@@ -139,6 +136,11 @@ def main(argv=None):
             return 1
         else:
             # Run the collection.
+            filter = collector.CollectorFilter(collection=options.collection,
+                                               device=options.device,
+                                               regexp=options.regexp)
+            logging.debug('Collection filter: %r', filter)
+
             c = collector.Collector(nc)
             c.collect_config(config_dict, filter=filter)
             logging.debug('Finished in %.2f seconds',
