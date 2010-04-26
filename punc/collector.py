@@ -25,13 +25,15 @@ import operator
 import Queue
 import os
 import re
-import traceback
+import threading
+import time
 
 import eventlet
 
 import notch.client
 
 import collection
+import rc_hg
 import ruleset_factory
 
 
@@ -41,6 +43,10 @@ class ConfigError(Exception):
 
 class InvalidCollection(Exception):
     """The collection defined was invalid."""
+
+
+CollectorFilter = collections.namedtuple('CollectorFilter',
+                                         'collection device regexp')
 
 
 class Collector(object):
@@ -62,30 +68,63 @@ class Collector(object):
     STOP_EVENT = 'STOP'
 
     def __init__(self, notch_client, path='./tmpdata'):
+        self._lock = threading.Lock()
         self._nc = notch_client
         self._errors = []
         self._results = {}
         self._orders = collections.deque()
-        # Will be the greenthread for our queue processor. 
-        self._gt = None
         self.path = path
+        self.repo_path = None
         self.request_q = eventlet.queue.LightQueue()
         self.status_event = eventlet.event.Event()
+        self.repo = None
 
     @property
     def errors(self):
         return self._errors[:]
 
-    def collect_config(self, config, name='default'):
+    def _collection_name_matches_filter(self, name, filter):
+        if filter is not None and filter.collection is not None:
+            if name == filter.collection:
+                return True
+
+    def collect_config(self, config, filter=None, name=None):
+        """Collects all recipes in the supplied master configuration."""
+        self._lock.acquire()
+        try:
+            self.path = config.get('base_path', self.path)
+            self.repo_path = config.get('repo_path', None)
+            self.repo = rc_hg.MercurialRevisionControl(self.repo_path,
+                                                       self.path)
+            collections = config.get('collections', {})
+            stats = {}
+            for name, recipes in collections.iteritems():
+                if filter:
+                    if not self._collection_name_matches_filter(name, filter):
+                        continue
+                stats[name] = self._collect_recipes(recipes,
+                                                    filter=filter, name=name)
+            self.commit_repository()
+            logging.info('[%s] completed', name)
+        finally:
+            self._lock.release()
+
+    def _collect_recipes(self, config, filter=None, name=None):
+        """Collects the supplied recipes configuration."""
         path = self.path
         # Paths will be created.
         c = collection.Collection(name, config, path=path)
-        c.collect(self._nc)
-        logging.debug('Awaiting results from collection %s', name)
+        start = time.time()
+        c.collect(self._nc, filter=filter)
+        end = time.time()
         self._nc.wait_all()
-        logging.debug('Received %d results for collection %s', len(c.results),
-                      name)
-        self._produce_output(config, path, c.results)
+        logging.debug('[%s] %d responses received for %d recipes',
+                      name, len(c.results), len(config.get('recipes', [])))
+        return self._produce_output(path, c.results)
+
+    def commit_repository(self, message=None):
+        self.repo.addremove()
+        self.repo.commit(message=message)
 
     def collect(self, device, regexp=False, collection_name=None):
         """Collects for a device or a regexp of devices.
@@ -97,7 +136,7 @@ class Collector(object):
           device: A string, either a single device name, or if regexp=True,
             a regular expression matching device names.
           regexp: A boolean, if True, treat device as a regualr expression.
-          collection_name: A string, a collection name to collect for the 
+          collection_name: A string, a collection name to collect for the
             given devices.
         """
         # Scan the full configurations, replacing all regexes with the
@@ -113,18 +152,11 @@ class Collector(object):
             c[key] = collection
         # Add to the queue.
         self.request_q.put((key, c))
-        
-    def stop(self):
-        self.status_event.send(self.STOP_EVENT)
-        if hasattr(self, '_gt') and self._gt:
-            self._gt.wait()
 
-    def _write_header(self, file_obj, rule):
-        header = ruleset_factory.get_ruleset_with_name(rule.ruleset).header
-        if header:
-            file_obj.write(header + '\n')
+    def _get_header(self, rule):       
+        return ruleset_factory.get_ruleset_with_name(rule.ruleset).header
 
-    def _produce_output(self, config, path, results, trailing_newline=True):
+    def _produce_output(self, path, results, trailing_newline=True):
         files = {}
         for result in sorted(results):
             try:
@@ -134,14 +166,20 @@ class Collector(object):
                     logging.info('Creating path %r', our_path)
                     os.makedirs(our_path, mode=0750)
 
+                # Write the output for this result into the right file.
                 filename = os.path.join(our_path, filename)
                 if filename in files:
+                    # Existing opened file.
                     f = files[filename]
                 else:
+                    # New file. Open it and write the header.
                     f = open(filename, 'w')
                     files[filename] = f
-                    self._write_header(f, rule)
+                    header = self._get_header(rule)
+                    if header:
+                        f.write(header + '\n')
 
+                # Write output to file.
                 f.write(results[result])
             except (OSError, IOError, EOFError), e:
                 logging.error('Failed writing %r. %s: %s', filename,
@@ -156,4 +194,4 @@ class Collector(object):
                 f.close()
             except (OSError, IOError, EOFError):
                 continue
-                
+        return files

@@ -87,63 +87,65 @@ def get_options():
     p.add_option('-a', '--agent', dest='agents', action='append',
                  help='Notch Agent host:port addresses', default=[])
     p.add_option('-f', '--config', dest='config',
-                 help='(Mandatory) Configuration file name', default=None)
-# TODO(afort): Fix filtering options.
-#     p.add_option('-c', '--collection', dest='collection',
-#                  help='Run only a specific named collection', default=None)
-#     p.add_option('-d', '--device', dest='device',
-#                  help='Collect a specific device only', default=None)
-#     p.add_option('-r', '--regexp', dest='regexp',
-#                  help='Collect a regexp of devices', default=None)
+                 help='Configuration file name', default=None)
+    p.add_option('-c', '--collection', dest='collection',
+                 help='Run only a specific named collection', default='default')
+    p.add_option('-n', '--device', dest='device',
+                 help='Collect a specific device name only', default=None)
+    p.add_option('-r', '--regexp', dest='regexp',
+                 help='Collect a regexp of devices', default=None)
     p.add_option('-d', '--debug', action='store_true', dest='debug')
     return p.parse_args()
 
 
 def main(argv=None):
+    start = time.time()
     argv = argv or sys.argv
     options, arguments = get_options()
+    filter = collector.CollectorFilter(collection=options.collection,
+                                       device=options.device,
+                                       regexp=options.regexp)
     prettify_logging(options)
 
-    if not options.config:
-        config = './punc.yaml'
-        if not os.path.exists(config):
-            config = '/etc/punc.yaml'
-    else:
+    # Read the configuration file.
+    if options.config:
         config = options.config
-    if not os.path.exists(config):
+    else:
+        config_path_options = [os.path.join('.', 'punc.yaml'),
+                               os.path.join('etc', 'punc.yaml'),
+                               os.path.join('opt', 'local', 'etc', 'punc.yaml'),
+                               os.path.join('usr', 'local', 'etc', 'punc.yaml'),
+                               ]
         config = None
-    if config is None:
-        logging.info('Error: No Punc configuration file found.')
-        sys.exit(0)
+        for config_path in config_path_options:
+            if os.path.exists(config_path):
+                config = config_path
+        if config is None:
+            logging.info('Error: No Punc configuration file found.')
+            sys.exit(0)
 
     # Attempt to gather agent addresses from the environment.
     agents = options.agents or os.getenv('NOTCH_AGENTS')
 
+    # Load the configuration.
     config_dict = punc_config.get_config_from_file(config)
-    if not config_dict:
+    if config_dict:
+        # Setup notch client.
+        try:
+            nc = notch.client.Connection(agents)
+        except notch.client.NoAgentsError:
+            print ('Error: You must supply agents via -a or '
+                   'the NOTCH_AGENTS environment variable.')
+            return 1
+        else:
+            # Run the collection.
+            c = collector.Collector(nc)
+            c.collect_config(config_dict, filter=filter)
+            logging.debug('Finished in %.2f seconds',
+                          time.time() - start)
+    else:
         print 'Error: No configuration loaded (see above for parse errors).'
         return 2
-    try:
-        logging.debug('Settuping up Notch Client')
-        nc = notch.client.Connection(agents)
-    except notch.client.NoAgentsError:
-        print ('Error: You must supply agents via -a or '
-               'the NOTCH_AGENTS environment variable.')
-        return 1
-
-    start = time.time()
-    logging.info('Starting collection.')
-    base_path = config_dict.get('base_path', './tmpdata')
-    c = collector.Collector(nc, path=base_path)
-    collections = config_dict.get('collections')
-    for name, collection in collections.iteritems():
-        collection_stats = c.collect_config(collection, name=name)
-    logging.info('Collection completed in %.2f seconds',
-                 time.time() - start)
-    try:
-        c.stop()
-    finally:
-        pass
 
 
 if __name__ == '__main__':

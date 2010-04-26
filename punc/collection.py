@@ -2,6 +2,7 @@
 import copy
 import collections
 import logging
+import re
 import time
 import traceback
 
@@ -33,7 +34,7 @@ class Recipe(object):
 class Collection(object):
     """A PUNC Network Configuration Collection."""
 
-    def __init__(self, name, config, path='./'):
+    def __init__(self, name, config, path='./punc-repo'):
         """Initialiser.
 
         Args:
@@ -75,10 +76,17 @@ class Collection(object):
     def results(self):
         """Get the results once all network requests are done."""
         return self._results
-        
-    def collect(self, nc):
+
+    def _device_matches_name_or_regexp(self, device_name,
+                                       name=None, regexp=None):
+        if name is None:
+            return bool(regexp.match(device_name))
+        elif regexp is None:
+            return bool(name == device_name)
+            
+    def collect(self, nc, filter=None):
         """Executes the collection with a Notch Client instance."""
-        logging.info('Collection %s started', self.name)
+        logging.info('[%s] started', self.name)
         reqs = []
         start = time.time()
         self._devices = {}
@@ -86,25 +94,34 @@ class Collection(object):
             reg = recipe.regexp
             devices = nc.devices_info(reg)
             self._devices.update(devices)
-            notch_requests = self._get_requests(recipe, *devices.keys())
+            notch_requests = self._get_requests(recipe, filter,
+                                                *devices.keys())
             nc.exec_requests(notch_requests)
         
         end = time.time()
-        logging.info('Send all requests for collection %s in %.2fs',
+        logging.info('[%s] requests sent in %.2fs',
                      self.name, end-start)
 
-    def _get_requests(self, recipe, *devices):
+    def _get_requests(self, recipe, filter, *devices):
         """Generates notch requests for the current recipe and devices."""
         reqs = []
         try:
             ruleset = ruleset_factory.get_ruleset_with_name(recipe.ruleset)
         except KeyError, exc:
-            logging.debug('No ruleset for device type %s', exc)
+            logging.debug('[%s] No ruleset for device type %s', self.name, exc)
             return reqs
 
         reqs = []
         for action in ruleset.actions:
             for device in devices:
+                if filter:
+                    if filter.device and filter.device != device:
+                        logging.debug('SKIP %s != %s', filter.device, device)
+                        continue
+                    if filter.regexp and not bool(
+                        re.compile(filter.regexp).match(device)):
+                        logging.debug('SKIP re %s != %s', filter.regexp, device)
+                        continue
                 d = self._devices.get(device)
                 if d:
                     device_vendor = d.get('device_type')
@@ -117,7 +134,8 @@ class Collection(object):
                                          callback_args=(recipe, action))
                 reqs.append(r)
 
-        logging.debug('Generated %d request objects', len(reqs))
+        logging.debug('[%s] %d requests for %r',
+                      self.name, len(reqs), recipe)
         return reqs
 
     def _notch_callback(self, r, *args, **kwargs):
@@ -128,8 +146,8 @@ class Collection(object):
                 error_msg = r.error.args[1].split(':', 1)[1].strip()
             else:
                 error_msg = str(r.error)
-            logging.error('%s: %s: %s',
-                          device_name, r.error.args[0], error_msg)
+            logging.error('[%s] %s: %s: %s',
+                          self.name, device_name, r.error.args[0], error_msg)
             recipe.errors.append((device_name, action, error_msg))
         else:
             result = r.result
