@@ -164,20 +164,21 @@ class MercurialRevisionControl(object):
                     if num_removed:
                         deets.append('%d deletes' % num_removed)
                     deets = ' '.join(sorted(deets))
-                    msg = ['Network configuration change: %s\n\n' % deets]
+                    msg = ['Network configuration change: %s\n' % deets]
                     if num_added:
-                        msg.append(' %d new devices: %s' % (
+                        msg.append('%d new devices: %s' % (
                                 num_added, ' '.join(
                                     [os.path.basename(a) for a in added])))
                     if num_modified:
-                        msg.append(' %d devices changed: %s' % (
+                        msg.append('%d devices changed: %s' % (
                                 num_modified, ' '.join(
                                     [os.path.basename(m) for m in modified])))
                     if num_removed:
-                        msg.append(' %d devices removed: %s' % (
+                        msg.append('%d devices removed: %s' % (
                                 num_removed, ' '.join(
                                     [os.path.basename(r) for r in removed])))
-                    logging.info('\n'.join(msg))
+                    message = '\n'.join(msg)
+                    logging.info(message)
 
             if paths:
                 mercurial.commands.commit(self._ui, self._repo, paths,
