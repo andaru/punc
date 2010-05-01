@@ -19,10 +19,11 @@ class ParseConfiguration(parser.AddDropParser):
     """Configuration parser."""
 
     DROP_RE = (parser.BLANK_LINE,
-               re.compile(r'Built on .+ '),
-               re.compile(r'Generated .+ '),
-               re.compile(r'All rights reserved. All use subject to .*'),
-               re.compile(r'TiMOS-'),
+               re.compile(r'^# Built on '),
+               re.compile(r'^# Generated [A-Z]'),
+               re.compile(r'^# All rights reserved. All use subject to '),
+               re.compile(r'^# TiMOS-'),
+               re.compile(r'^# Finished [A-Z]'),
                )
 
 

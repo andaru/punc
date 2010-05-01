@@ -4,6 +4,7 @@ import collections
 import logging
 import re
 import time
+import threading
 import traceback
 
 import notch.client
@@ -13,6 +14,12 @@ import ruleset_factory
 
 class InvalidCollectionError(Exception):
     """The collection defined was invalid."""
+
+
+class ResultError(object):
+
+    def __init__(self, error):
+        self.error = error
 
 
 class Recipe(object):
@@ -49,6 +56,8 @@ class Collection(object):
         self._results = {}
         self.recipes = []
         self.path = path
+        self._outstanding_requests = set()
+        self._finished_collection = threading.Event()
         self._parse_config(config)
 
     def _fix_path(self, path):
@@ -83,7 +92,7 @@ class Collection(object):
             return bool(regexp.match(device_name))
         elif regexp is None:
             return bool(name == device_name)
-            
+
     def collect(self, nc, filter=None):
         """Executes the collection with a Notch Client instance."""
         logging.info('[%s] started', self.name)
@@ -96,12 +105,18 @@ class Collection(object):
             self._devices.update(devices)
             notch_requests = self._get_requests(recipe, filter,
                                                 *devices.keys())
+            self._outstanding_requests = (
+                self._outstanding_requests.union(notch_requests))
             nc.exec_requests(notch_requests)
         
         end = time.time()
-        logging.info('[%s] requests sent in %.2fs',
-                     self.name, end-start)
+        logging.info('[%s] %d requests sent in %.2fs',
+                     self.name, len(self._outstanding_requests), end-start)
+        self._wait_for_outstanding_requests()
 
+    def _wait_for_outstanding_requests(self):
+        self._finished_collection.wait()
+    
     def _get_requests(self, recipe, filter, *devices):
         """Generates notch requests for the current recipe and devices."""
         reqs = []
@@ -138,13 +153,15 @@ class Collection(object):
                                              callback=self._notch_callback,
                                              callback_args=(recipe, action))
                     reqs.append(r)
-
+                    
         logging.debug('[%s] %d requests for %r',
                       self.name, len(reqs), recipe)
         return reqs
 
+    
     def _notch_callback(self, r, *args, **kwargs):
         recipe, action = args
+        self._outstanding_requests.discard(r)
         device_name = r.arguments.get('device_name')
         if r.error is not None:
             if r.error.args[1].startswith('ERROR '):
@@ -169,4 +186,6 @@ class Collection(object):
                 parsed_result = result
 
             self._results[(recipe, device_name, action.order)] = parsed_result
-
+        # Set completion status if we've received everything.
+        if not self._outstanding_requests:
+            self._finished_collection.set()

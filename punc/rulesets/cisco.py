@@ -19,13 +19,14 @@ class ParseShowVersion(parser.AddDropParser):
 
 
 class ParseConfiguration(parser.AddDropParser):
-    """Empty parser."""
+    """Parse the Cisco "show running-config" output."""
 
     DROP_RE = (parser.BLANK_LINE,
                re.compile(r'^Building configuration\..*'),
                re.compile(r'^Current configuration.*'),
                re.compile(r'Last configuration change at.* by.*'),
                re.compile(r'NVRAM config last updated at.* by.*'),
+               re.compile(r'^ntp clock-period [0-9]+'),
                re.compile('Using [0-9].*'),
                )
 

@@ -105,14 +105,17 @@ def main(argv=None):
     prettify_logging(options)
 
     # Read the configuration file.
+    config_path_options = [os.path.join('.', 'punc.yaml'),
+                           os.path.join('etc', 'punc.yaml'),
+                           os.path.join('opt', 'local', 'etc', 'punc.yaml'),
+                           os.path.join('usr', 'local', 'etc', 'punc.yaml'),
+                           os.path.join('usr', 'local', 'etc',
+                                        'punc', 'punc.yaml'),
+                           ]
+
     if options.config:
         config = options.config
     else:
-        config_path_options = [os.path.join('.', 'punc.yaml'),
-                               os.path.join('etc', 'punc.yaml'),
-                               os.path.join('opt', 'local', 'etc', 'punc.yaml'),
-                               os.path.join('usr', 'local', 'etc', 'punc.yaml'),
-                               ]
         config = None
         for config_path in config_path_options:
             if os.path.exists(config_path):
@@ -125,6 +128,9 @@ def main(argv=None):
     agents = options.agents or os.getenv('NOTCH_AGENTS')
 
     # Load the configuration.
+    if config in config_path_options:
+        logging.info('Loading default configuration file option: %s',
+                     config)
     config_dict = punc_config.get_config_from_file(config)
     if config_dict:
         # Setup notch client.

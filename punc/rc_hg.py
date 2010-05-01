@@ -90,9 +90,10 @@ class MercurialRevisionControl(object):
                         try:
                             dest_repo = mercurial.hg.repository(
                                 self._ui, self.local_path)
-                        except mercurial.error.Error, e:
-                            # Something else went wrong.
-                            logging.error('Mercurial error opening repo '
+                        except Exception, e:
+                            # Something else went wrong, and Mercurial doesn't
+                            # have a master Exception subclass.
+                            logging.error('Error opening Mercurial repo '
                                           '%r: %s: %s',
                                           self.local_path,
                                           e.__class__.__name__, str(e))
@@ -121,29 +122,41 @@ class MercurialRevisionControl(object):
         """Adds all new files and removes all removed files from repository."""
         self._ui.pushbuffer()
         try:
-            mercurial.commands.addremove(
-                self._ui, self._repo,
-                similarity=self.MOVE_SIMILARITY_PERCENT)
+            try:
+                mercurial.commands.addremove(
+                    self._ui, self._repo,
+                    similarity=self.MOVE_SIMILARITY_PERCENT)
+            except Exception, e:
+                logging.error('Fatal error during repository operation. '
+                              '%s: %s', e.__class__.__name__, str(e))
+                raise SystemExit(2)
         finally:
             self._ui.popbuffer()
 
     def _postcommit(self, unused_changed):
+        """Actions to run after the Mercurial commit action."""
         if self.repo_path:
             logging.debug('Pushing Mercurial changes to %s', self.repo_path)
             mercurial.commands.push(self._ui, self._repo, dest=self.repo_path)
 
-    def commit(self, paths=None, message=None, **options):
+    def commit(self, paths=None, message=None, exclude=None):
         """Commits paths in the repository with an optional commit message."""
         self._ui.pushbuffer()
         try:
-            (modified, added, removed, deleted, unused_unknown,
-             unused_ignored, unused_clean) = self._repo.status()
-            if unused_unknown:
-                logging.debug('Unknown: %r', unused_unknown)
-            if unused_ignored:
-                logging.debug('Ignored: %r', unused_ignored)
-            if unused_clean:
-                logging.debug('Cleaned: %r', unused_clean)
+            try:
+                (modified, added, removed, deleted, unused_unknown,
+                 unused_ignored, unused_clean) = self._repo.status()
+                if unused_unknown:
+                    logging.debug('Unknown: %r', unused_unknown)
+                if unused_ignored:
+                    logging.debug('Ignored: %r', unused_ignored)
+                if unused_clean:
+                    logging.debug('Cleaned: %r', unused_clean)
+            except Exception, e:
+                logging.error('Failed to check repository status. '
+                              'Check repository status. Error: %s: %s',
+                              e.__class__.__name__, str(e))
+                raise SystemExit(2)
                 
             if not (
                 len(modified) or len(added) or len(removed) or len(deleted)):
@@ -182,9 +195,9 @@ class MercurialRevisionControl(object):
 
             if paths:
                 mercurial.commands.commit(self._ui, self._repo, paths,
-                                          message=message)
+                                          exclude=exclude, message=message)
             else:
-                mercurial.commands.commit(self._ui, self._repo,
+                mercurial.commands.commit(self._ui, self._repo, exclude=exclude,
                                           message=message)
             self._postcommit(changes)
         finally:

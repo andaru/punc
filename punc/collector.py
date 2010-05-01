@@ -48,14 +48,6 @@ CollectorFilter = collections.namedtuple('CollectorFilter',
 
 class Collector(object):
     """The PUNC Collector."""
-    # How many seconds to sleep for when the queue is empty. It also
-    # sets the minimum latency when the queue is empty. As this is
-    # used to encourage cooperative greentasking, the value can be
-    # very small.
-    EMPTY_QUEUE_SLEEP_SEC = 0.01
-
-    # The status_event stop signal.
-    STOP_EVENT = 'STOP'
 
     def __init__(self, notch_client, path='./punc-repo'):
         self._lock = threading.Lock()
@@ -66,6 +58,9 @@ class Collector(object):
         self.path = path
         self.repo_path = None
         self.repo = None
+        # Set of files to exclude from the commit.
+        self._exclusions = None
+	self._do_not_commit = False
 
     @property
     def errors(self):
@@ -94,7 +89,14 @@ class Collector(object):
                         continue
                 stats[name] = self._collect_recipes(recipes,
                                                     filter=filter, name=name)
-            self.commit_repository()
+            if self._exclusions:
+                exclude = list(self._exclusions)
+            else:
+                exclude = None
+            if not self._do_not_commit:
+                self.commit_repository(exclude=exclude)
+            else:
+                logging.error('Commit aborted: no results received from Notch.')
             logging.info('[%s] completed', name)
         finally:
             self._lock.release()
@@ -104,33 +106,43 @@ class Collector(object):
         path = self.path
         # Paths will be created.
         c = collection.Collection(name, config, path=path)
-        start = time.time()
         c.collect(self._nc, filter=filter)
-        end = time.time()
-        self._nc.wait_all()
-        logging.debug('[%s] %d responses received for %d recipes',
-                      name, len(c.results), len(config.get('recipes', [])))
-        return self._produce_output(path, c.results)
 
-    def commit_repository(self, message=None):
+        def error_result(r):
+            return bool(r.error is not None)
+
+        def ok_result(r):
+            return bool(r.error is None)
+
+        logging.debug('[%s] %d responses received for '
+                      '%d recipes',
+                      name, len(c.results),
+                      len(config.get('recipes', [])))
+        if not len(c.results):
+            self._do_not_commit = True
+        return self._produce_output(path, c.results, name=name)
+
+    def commit_repository(self, message=None, exclude=None):
         self.repo.addremove()
-        self.repo.commit(message=message)
+        self.repo.commit(message=message, exclude=exclude)
 
-    def _get_header(self, rule):       
-        return ruleset_factory.get_ruleset_with_name(rule.ruleset).header
+    def _get_header(self, recipe):       
+        return ruleset_factory.get_ruleset_with_name(recipe.ruleset).header
 
-    def _produce_output(self, path, results, trailing_newline=True):
+    def _produce_output(self, path, results, trailing_newline=True, name=None):
         files = {}
+        records_written = {}
+        exclusions = set()
         for result in sorted(results):
             try:
-                rule, filename, _ = result
-                our_path = os.path.join(path, rule.path)
+                recipe, devicename, _ = result
+                our_path = os.path.join(path, recipe.path)
                 if not os.path.exists(our_path):
                     logging.info('Creating path %r', our_path)
                     os.makedirs(our_path, mode=0750)
 
                 # Write the output for this result into the right file.
-                filename = os.path.join(our_path, filename)
+                filename = os.path.join(our_path, devicename)
                 if filename in files:
                     # Existing opened file.
                     f = files[filename]
@@ -138,16 +150,25 @@ class Collector(object):
                     # New file. Open it and write the header.
                     f = open(filename, 'w')
                     files[filename] = f
-                    header = self._get_header(rule)
+                    header = self._get_header(recipe)
                     if header:
                         f.write(header + '\n')
 
-                # Write output to file.
-                f.write(results[result])
+                print len(results[result] or '')
+                
+                if not len(recipe.errors):
+                    # Write output to file.
+                    f.write(results[result])
+                else:
+                    logging.error('[%s] Skipping file %s; incomplete results '
+                                  'for device', name, filename)
+                    exclusions.add(filename)
+                    
             except (OSError, IOError, EOFError), e:
                 logging.error('Failed writing %r. %s: %s', filename,
                               e.__class__.__name__, str(e))
                 continue
+        self._exclusions = exclusions
 
         # Write a trailing newline and close all files.
         for f in files.values():
