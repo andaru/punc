@@ -6,6 +6,12 @@ import parser
 COMMENT = '! '
 
 
+ERRORS = (
+    re.compile(
+        "\\%\\ Invalid\\ input\\ detected\\ at\\ \\'\\^\\'\\ marker\\."),
+    )
+
+
 class ParseShowVersion(parser.AddDropParser):
 
     commented = True
@@ -16,19 +22,21 @@ class ParseShowVersion(parser.AddDropParser):
     INC_RE = (re.compile('version', re.I),
               re.compile('Using [0-9].*'),
               )
+    ERROR_RE = ERRORS
 
 
 class ParseConfiguration(parser.AddDropParser):
     """Parse the Cisco "show running-config" output."""
 
     DROP_RE = (parser.BLANK_LINE,
-               re.compile(r'^Building configuration\..*'),
-               re.compile(r'^Current configuration.*'),
-               re.compile(r'Last configuration change at.* by.*'),
-               re.compile(r'NVRAM config last updated at.* by.*'),
+               re.compile(r'^Building configuration\.'),
+               re.compile(r'^Current configuration'),
+               re.compile(r'Last configuration change at '),
+               re.compile(r'NVRAM config last updated at '),
                re.compile(r'^ntp clock-period [0-9]+'),
                re.compile('Using [0-9].*'),
                )
+    ERROR_RE = ERRORS
 
 
 class IosRuleSet(ruleset.RuleSet):
@@ -47,5 +55,3 @@ class IosRuleSet(ruleset.RuleSet):
                            order='002', parser=ParseConfiguration,
                            parser_args={}),
             ]
-
-

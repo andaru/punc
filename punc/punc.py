@@ -147,8 +147,9 @@ def main(argv=None):
                                                regexp=options.regexp)
             logging.debug('Collection filter: %r', filter)
 
-            c = collector.Collector(nc)
-            c.collect_config(config_dict, filter=filter)
+            c = collector.Collector(nc, filter=filter, config=config_dict)
+            c.collect()
+#            c.collect_config(config_dict, filter=filter)
             logging.debug('Finished in %.2f seconds',
                           time.time() - start)
     else:

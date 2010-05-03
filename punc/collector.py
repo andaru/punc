@@ -49,133 +49,152 @@ CollectorFilter = collections.namedtuple('CollectorFilter',
 class Collector(object):
     """The PUNC Collector."""
 
-    def __init__(self, notch_client, path='./punc-repo'):
+    def __init__(self, notch_client, filter=None, config=None):
+        config = config or {}
+        # A CollectorFilter instance.
+        self.filter = filter
+        self.path = config.get('base_path')
+        self.repo_path = config.get('master_repo_path')
+        self.collections = config.get('collections')
+        # Our sequence of collection objects.
+        self._collections = []
+
+        # Set of files to exclude from the commit.
+        self._exclusions = None
+        self.total_results = 0 
+
         self._lock = threading.Lock()
         self._nc = notch_client
         self._errors = []
         self._results = {}
-        self._orders = collections.deque()
-        self.path = path
-        self.repo_path = None
-        self.repo = None
-        # Set of files to exclude from the commit.
-        self._exclusions = None
-	self._do_not_commit = False
+        # A cache of file objects by path, considered held from
+        # instantiation time through to completion of collection.
+        self._file_objects = {}
 
-    @property
-    def errors(self):
-        return self._errors[:]
+        self.setup()
 
-    def _collection_name_matches_filter(self, name, filter):
-        if filter is not None and filter.collection is not None:
-            if name == filter.collection:
-                return True
-
-    def collect_config(self, config, filter=None, name=None):
-        """Collects all recipes in the supplied master configuration."""
+    def setup(self):
+        for name, recipes in self.collections.iteritems():
+            if (self.filter and
+                not self._collection_matches_filter(name, self.filter)):
+                continue
+            else:
+                c = collection.Collection(name, recipes, path=self.path,
+                                          notch_client=self._nc)
+                self._collections.append(c)
+           
+    def collect(self):
+        """Collects all collections in the supplied configuration."""
         if not self._lock.acquire(False):
-            logging.debug('[%s] waiting for collection lock', name)
+            logging.debug('waiting for running collection to complete')
             self._lock.acquire()
         try:
-            self.path = config.get('base_path', self.path)
-            self.repo_path = config.get('master_repo_path', None)
-            self.repo = rc_hg.MercurialRevisionControl(self.repo_path,
-                                                       self.path)
-            collections = config.get('collections', {})
-            stats = {}
-            for name, recipes in collections.iteritems():
-                if filter:
-                    if not self._collection_name_matches_filter(name, filter):
-                        continue
-                stats[name] = self._collect_recipes(recipes,
-                                                    filter=filter, name=name)
-            if self._exclusions:
-                exclude = list(self._exclusions)
-            else:
-                exclude = None
-            if not self._do_not_commit:
-                self.commit_repository(exclude=exclude)
+            # Collect results.
+            for c in self._collections:
+                coll_start = time.time()
+                c.collect(filter=self.filter)
+                logging.debug('[%s] %d responses (%d errors on %d devices) '
+                              'received for %d recipes',
+                              c.name, len(c.results), c.num_total_errors,
+                              len(c.devices_with_errors),
+                              len(c.recipes))
+                logging.info('[%s] completed in %.2fs', c.name,
+                             time.time() - coll_start)
+                self.total_results += len(c.results)
+
+            if self.total_results:
+                # Write.
+                self._write()
+                # Commit.
+                exclude = self._devices_to_exclude() or None
+                self._commit(exclude=exclude)
             else:
                 logging.error('Commit aborted: no results received from Notch.')
-            logging.info('[%s] completed', name)
         finally:
             self._lock.release()
 
-    def _collect_recipes(self, config, filter=None, name=None):
-        """Collects the supplied recipes configuration."""
-        path = self.path
-        # Paths will be created.
-        c = collection.Collection(name, config, path=path)
-        c.collect(self._nc, filter=filter)
+    def _collection_matches_filter(self, collection, f):
+        if f is not None and f.collection is not None:
+            if collection == f.collection:
+                return True
 
-        def error_result(r):
-            return bool(r.error is not None)
+    def _commit(self, message=None, exclude=None):
+        """Commits changes to the Mercurial repository."""
+        if exclude:
+            if len(exclude) > 20:
+                s = ' (first 20)'
+            else:
+                s = ''
 
-        def ok_result(r):
-            return bool(r.error is None)
+            logging.debug('Commit will exclude devices%s: %s', s,
+                          ' '.join(exclude[:20]))
 
-        logging.debug('[%s] %d responses received for '
-                      '%d recipes',
-                      name, len(c.results),
-                      len(config.get('recipes', [])))
-        if not len(c.results):
-            self._do_not_commit = True
-        return self._produce_output(path, c.results, name=name)
+        # Setup the repo, make changes and commit.
+        repo = rc_hg.MercurialRevisionControl(self.repo_path,
+                                              self.path)
+        repo.addremove()
+        repo.commit(message=message, exclude=exclude)
 
-    def commit_repository(self, message=None, exclude=None):
-        self.repo.addremove()
-        self.repo.commit(message=message, exclude=exclude)
+    def _devices_to_exclude(self):
+        devices_with_errors = set()
+        for c in self._collections:
+            dwe = c.devices_with_errors
+            if dwe:
+                devices_with_errors = devices_with_errors.union(dwe)
+        return sorted(list(devices_with_errors))
 
-    def _get_header(self, recipe):       
-        return ruleset_factory.get_ruleset_with_name(recipe.ruleset).header
+    def _error_report(self):
+        rep = []
+        for c in self._collections:
+            rep.append('Collection %s' % c.name)
+            for device in sorted(c.errors.keys()):
+                rep.append('  %s:' % device)
+                for err in c.errors.get(device):
+                    rep.append('    %r' % err)
+        return '\n'.join(rep)
 
-    def _produce_output(self, path, results, trailing_newline=True, name=None):
-        files = {}
-        records_written = {}
-        exclusions = set()
-        for result in sorted(results):
-            try:
-                recipe, devicename, _ = result
-                our_path = os.path.join(path, recipe.path)
-                if not os.path.exists(our_path):
-                    logging.info('Creating path %r', our_path)
-                    os.makedirs(our_path, mode=0750)
-
-                # Write the output for this result into the right file.
-                filename = os.path.join(our_path, devicename)
-                if filename in files:
-                    # Existing opened file.
-                    f = files[filename]
+    def _write(self, trailing_newline=True):
+        """Writes collection results to disk."""
+        for c in self._collections:
+            devices_with_errors = c.devices_with_errors
+            for result in sorted(c.results):
+                recipe, device_name, _ = result
+                if device_name in devices_with_errors:
+                    logging.error(
+                            '[%s] Skipping device %s; incomplete results for '
+                            'device', c.name, device_name)
+                    continue
                 else:
-                    # New file. Open it and write the header.
-                    f = open(filename, 'w')
-                    files[filename] = f
-                    header = self._get_header(recipe)
-                    if header:
-                        f.write(header + '\n')
+                    try:
+                        our_path = os.path.join(self.path, recipe.path)
+                        if not os.path.exists(our_path):
+                            logging.warn('Creating directory %s', our_path)
+                            os.makedirs(our_path, mode=0750)
 
-                print len(results[result] or '')
-                
-                if not len(recipe.errors):
-                    # Write output to file.
-                    f.write(results[result])
-                else:
-                    logging.error('[%s] Skipping file %s; incomplete results '
-                                  'for device', name, filename)
-                    exclusions.add(filename)
-                    
-            except (OSError, IOError, EOFError), e:
-                logging.error('Failed writing %r. %s: %s', filename,
-                              e.__class__.__name__, str(e))
-                continue
-        self._exclusions = exclusions
+                        filename = os.path.join(our_path, device_name)
 
-        # Write a trailing newline and close all files.
-        for f in files.values():
+                        if filename in self._file_objects:
+                            f = self._file_objects[filename]
+                        else:
+                            f = open(filename, 'w')
+                            self._file_objects[filename] = f
+                            header = ruleset_factory.get_ruleset_with_name(
+                                recipe.ruleset).header
+                            if header:
+                                f.write(header + '\n')
+
+                        f.write(c.results[result])
+                    except (OSError, IOError, EOFError), e:
+                        logging.error('Failed writing %r. %s: %s', filename,
+                                      e.__class__.__name__, str(e))
+                        continue
+
+        # Close file objects and remove references to them.
+        for f in self._file_objects.values():
             try:
                 if trailing_newline:
                     f.write('\n')
                 f.close()
             except (OSError, IOError, EOFError):
                 continue
-        return files
+        self._file_objects = {}

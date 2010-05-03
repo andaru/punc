@@ -53,18 +53,27 @@ class MercurialRevisionControl(object):
             dest_repo = None
             if self.repo_path:
                 # Attempt to use an existing repo to pull changes to.
-                dest_repo = mercurial.hg.repository(self._ui,
-                                                    self.local_path)
-                logging.info('Pulling updates from master repository %s to %s',
-                             self.repo_path, self.local_path)
                 try:
-                    mercurial.commands.pull(
-                        self._ui, dest_repo, source=self.repo_path)
+                    dest_repo = mercurial.hg.repository(self._ui,
+                                                        self.local_path)
                 except mercurial.error.RepoError, e:
-                    logging.error('Mercurial error during remote repo pull: %s',
-                                  str(e))
-                    logging.error('Will continue without remote repository.')
+                    if 'not found' in str(e):
+                        logging.warn('Local repository does not yet exist.')
                     self.repo_path = None
+                else:
+                    logging.debug(
+                        'Pulling updates from master repository %s to %s',
+                        self.repo_path, self.local_path)
+                    try:
+                        mercurial.commands.pull(
+                            self._ui, dest_repo, source=self.repo_path)
+                    except mercurial.error.RepoError, e:
+                        logging.error(
+                            'Mercurial error during remote repo pull: %s',
+                            str(e))
+                        logging.warn(
+                            'Will continue without remote repository.')
+                        self.repo_path = None
 
             if not self.repo_path:
                 # No repository path means no source repository.
@@ -193,12 +202,13 @@ class MercurialRevisionControl(object):
                     message = '\n'.join(msg)
                     logging.info(message)
 
-            if paths:
-                mercurial.commands.commit(self._ui, self._repo, paths,
-                                          exclude=exclude, message=message)
-            else:
-                mercurial.commands.commit(self._ui, self._repo, exclude=exclude,
-                                          message=message)
+                if paths:
+                    mercurial.commands.commit(
+                        self._ui, self._repo, paths,
+                        exclude=exclude, message=message)
+                else:
+                    mercurial.commands.commit(
+                        self._ui, self._repo, exclude=exclude, message=message)
             self._postcommit(changes)
         finally:
             self._ui.popbuffer()
