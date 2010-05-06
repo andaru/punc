@@ -131,6 +131,7 @@ class Collection(object):
         start = time.time()
         self._devices = {}
         self._outstanding_requests = self._requests(filter)
+
         # Send all the requests.
         logging.info('[%s] Sending %d requests', self.name,
                      len(self._outstanding_requests))
@@ -151,10 +152,8 @@ class Collection(object):
         if not self._finished_collection.isSet():
             logging.error('[%s] Timed out waiting for responses after %.2fs',
                           self.name, timeout)
-            # All outstanding requests are now in error.
-            self._error_results(self._oustanding_requests)
-
-        logging.debug('[%s] Received all responses', self.name)
+	else:
+            logging.debug('[%s] Received all responses', self.name)
 
     def _get_requests(self, recipe, filter, *devices):
         """Generates notch requests for the current recipe and devices."""
