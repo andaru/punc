@@ -32,7 +32,7 @@ class ParseConfiguration(parser.AddDropParser):
 class TelcoRuleSet(ruleset.RuleSet):
 
     _show_version = {'command': 'show version'}
-    _show_running = {'command': 'show running'}
+    _show_running = {'command': 'show running-config'}
 
     header = '!RANCID-CONTENT-TYPE: telco\n!'
 
@@ -45,5 +45,3 @@ class TelcoRuleSet(ruleset.RuleSet):
                            order='002', parser=ParseConfiguration,
                            parser_args={}),
             ]
-
-

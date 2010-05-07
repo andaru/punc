@@ -66,8 +66,8 @@ class Collection(object):
         self._devices = {}
         self._results = {}
         self._errors = {}
-        self._outstanding_requests = set()
-        self._received_results = set()
+        self._outstanding_requests = []
+        self._received_results = []
         self._finished_collection = threading.Event()
 
         self._parse_config(config)
@@ -95,8 +95,7 @@ class Collection(object):
         self.command_timeout = config.get('command_timeout',
                                           self.DEFAULT_REQUEST_TIMEOUT_S)
         self.collection_timeout = config.get('collection_timeout',
-                                             self.MAX_COLLECTION_TIMEOUT_S)
-                                               
+                                             self.MAX_COLLECTION_TIMEOUT_S)                                              
 
     @property
     def results(self):
@@ -112,7 +111,7 @@ class Collection(object):
 
     def _requests(self, filter=None):
         """Generates all the Notch requests for the collection."""
-        reqs = set()
+        reqs = []
         for recipe in self.recipes:
             # Get device info on the devices matching our regexp.
             devices = self._nc.devices_info(recipe.regexp)
@@ -120,31 +119,34 @@ class Collection(object):
             self._devices.update(devices)
             notch_requests = self._get_requests(recipe, filter,
                                                 *devices.keys())
-            if notch_requests:
-                reqs = reqs.union(notch_requests)
+            if len(notch_requests):
+                reqs.extend(notch_requests)
+
         return reqs
 
     def collect(self, filter=None):
         """Executes the collection with a Notch Client instance."""
         logging.info('[%s] started', self.name)
-        self.filter = filter
         start = time.time()
         self._devices = {}
         self._outstanding_requests = self._requests(filter)
-
         # Send all the requests.
-        logging.info('[%s] Sending %d requests', self.name,
-                     len(self._outstanding_requests))
-        self._nc.exec_requests(self._outstanding_requests)
-        end = time.time()
-        logging.info('[%s] %d requests sent in %.2fs',
-                     self.name, len(self._outstanding_requests), end-start)
-        # Now wait for the requests to return.
-        try:
-            self._wait_for_outstanding_requests(timeout=self.collection_timeout)
-        except notch.client.TimeoutError, e:
-            logging.error('[%s] Timed out waiting for responses after %.2fs',
-                          self.name, self.collection_timeout)
+        if len(self._outstanding_requests):
+            logging.info('[%s] Sending %d requests', self.name,
+                         len(self._outstanding_requests))
+            self._nc.exec_requests(self._outstanding_requests)
+            end = time.time()
+            logging.info('[%s] %d requests sent in %.2fs',
+                         self.name, len(self._outstanding_requests), end-start)
+            # Now wait for the requests to return.
+            try:
+                self._nc.wait_all()
+            except notch.client.TimeoutError, e:
+                logging.error(
+                    '[%s] Timed out waiting for responses after %.2fs',
+                    self.name, self.collection_timeout)
+        else:
+            logging.warn('[%s] No work to do', self.name)
 
     def _wait_for_outstanding_requests(self, timeout=None):
         """Waits until all results have returned from Notch."""
@@ -164,7 +166,6 @@ class Collection(object):
             logging.debug('[%s] No ruleset for device type %s', self.name, exc)
             return reqs
 
-        reqs = []
         for action in ruleset.actions:
             for device in devices:
                 if filter:
@@ -183,6 +184,8 @@ class Collection(object):
                     device_vendor = None
 
                 if device_vendor != recipe.vendor:
+                    logging.debug('SKIP vendor %s != %s', recipe.vendor,
+                                  device_vendor)
                     continue
                 else:
                     args = copy.copy(action.args)
@@ -206,7 +209,7 @@ class Collection(object):
             is a (Recipe, rulesets.ruleset.Ruleset) tuple being the
             source recipe and the specific ruleset which generated the request.
         """
-        self._received_results.add(r)
+        self._received_results.append(r)
         try:
             recipe, action = args
             device_name = r.arguments.get('device_name')
@@ -264,11 +267,12 @@ class Collection(object):
     def devices_with_errors(self):
         return self._errors.keys()
 
+    @property
     def devices_without_errors(self):
         all = set(self._devices.keys())
         err = set(self._errors.keys())
         return list(all - err)
-            
+
     @property
     def num_total_errors(self):
         i = 0
@@ -276,6 +280,5 @@ class Collection(object):
             i += len(error_l)
         return i
 
-    @property
     def errors(self):
         return self._errors

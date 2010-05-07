@@ -51,6 +51,9 @@ class MercurialRevisionControl(object):
         self._ui.pushbuffer()
         try:
             dest_repo = None
+            if self.repo_path and not os.path.exists(self.repo_path):
+                self.create_repo(self.repo_path)
+
             if self.repo_path:
                 # Attempt to use an existing repo to pull changes to.
                 try:
@@ -111,7 +114,14 @@ class MercurialRevisionControl(object):
             self._setup_mercurial_data()
         finally:
             self._ui.popbuffer()
-        
+
+    def create_repo(self, path):
+        try:
+            mercurial.commands.init(self._ui, dest=path)
+        except Exception, e:
+            logging.error('Could not create Mercurial repository in %s. %s: %s',
+                          path, e.__class__.__name__, str(e))
+
     def _setup_mercurial_ignore(self):
         try:
             f = open(os.path.join(self.local_path, '.hgignore'), 'w')
@@ -121,11 +131,11 @@ class MercurialRevisionControl(object):
             logging.error('Failed to write Mercirial ignore file %r. %s: %s',
                           os.path.join(self.local_path, '.hgignore'),
                           e.__class__.__name__, str(e))
-    
+
     def _setup_mercurial_data(self):
         """Sets up mercurial specific options."""
         if not os.path.exists(os.path.join(self.local_path, '.hgignore')):
-            self._setup_mercurial_ignore()      
+            self._setup_mercurial_ignore()
 
     def addremove(self):
         """Adds all new files and removes all removed files from repository."""
@@ -166,7 +176,7 @@ class MercurialRevisionControl(object):
                               'Check repository status. Error: %s: %s',
                               e.__class__.__name__, str(e))
                 raise SystemExit(2)
-                
+
             if not (
                 len(modified) or len(added) or len(removed) or len(deleted)):
                 logging.info('No changes; '

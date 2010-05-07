@@ -89,7 +89,7 @@ def get_options():
     p.add_option('-f', '--config', dest='config',
                  help='Configuration file name', default=None)
     p.add_option('-c', '--collection', dest='collection',
-                 help='Run only a specific named collection', default='default')
+                 help='Run only a specific named collection', default=None)
     p.add_option('-n', '--device', dest='device',
                  help='Collect a specific device name only', default=None)
     p.add_option('-r', '--regexp', dest='regexp',
@@ -142,16 +142,18 @@ def main(argv=None):
             return 1
         else:
             # Run the collection.
+            logging.debug('Starting network device configuration backup')
             filter = collector.CollectorFilter(collection=options.collection,
                                                device=options.device,
                                                regexp=options.regexp)
-            logging.debug('Collection filter: %r', filter)
-
+            logging.debug('Using %r', filter)
             c = collector.Collector(nc, filter=filter, config=config_dict)
             c.collect()
-#            c.collect_config(config_dict, filter=filter)
             logging.debug('Finished in %.2f seconds',
                           time.time() - start)
+            err_report = c.error_report()
+            if err_report is not None:
+                logging.error(err_report)
     else:
         print 'Error: No configuration loaded (see above for parse errors).'
         return 2

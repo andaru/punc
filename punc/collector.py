@@ -106,88 +106,102 @@ class Collector(object):
                 # Write.
                 self._write()
                 # Commit.
-                exclude = self._devices_to_exclude() or None
-                self._commit(exclude=exclude)
+                self._commit()
             else:
                 logging.error('Commit aborted: no results received from Notch.')
         finally:
             self._lock.release()
 
     def _collection_matches_filter(self, collection, f):
-        if f is not None and f.collection is not None:
+        if f is not None:
             if collection == f.collection:
                 return True
+            if f.collection is None:
+                return True
+        return False
 
-    def _commit(self, message=None, exclude=None):
+    def _commit(self, message=None):
         """Commits changes to the Mercurial repository."""
-        if exclude:
-            if len(exclude) > 20:
-                s = ' (first 20)'
-            else:
-                s = ''
-
-            logging.debug('Commit will exclude devices%s: %s', s,
-                          ' '.join(exclude[:20]))
-
-        # Setup the repo, make changes and commit.
         repo = rc_hg.MercurialRevisionControl(self.repo_path,
                                               self.path)
         repo.addremove()
-        repo.commit(message=message, exclude=exclude)
+        repo.commit(message=message)
 
-    def _devices_to_exclude(self):
-        devices_with_errors = set()
-        for c in self._collections:
-            dwe = c.devices_with_errors
-            if dwe:
-                devices_with_errors = devices_with_errors.union(dwe)
-        return sorted(list(devices_with_errors))
-
-    def _error_report(self):
+    def error_report(self):
         rep = []
+        report = False
         for c in self._collections:
-            rep.append('Collection %s' % c.name)
-            for device in sorted(c.errors.keys()):
+            rep.append('Error report for collection %s' % c.name)
+            errs = c.errors()
+            for device in sorted(errs.keys()):
                 rep.append('  %s:' % device)
-                for err in c.errors.get(device):
-                    rep.append('    %r' % err)
-        return '\n'.join(rep)
+                error_set = set()
+                for e in errs.get(device):
+                    action, err = e
+                    error_set.add(err)
+                for err in error_set:
+                    rep.append('   %s' % err)
+                    report = True
+                rep.append('')
+            rep.append('')
+        if report:
+            return '\n'.join(rep)
+
+    def _result_counts(self):
+        result_counts = {}
+        for c in self._collections:
+            for key in sorted(c.results):
+                recipe, device_name, result_order = key
+                path = os.path.join(self.path, recipe.path, device_name)
+                if path in result_counts:
+                    result_counts[path] += 1
+                else:
+                    result_counts[path] = 1
+        return result_counts
+              
+    def _collate(self):
+        results = {}
+        removals = set()
+        counts = self._result_counts()
+
+        for c in self._collections:
+            for key in sorted(c.results):
+                recipe, device_name, result_order = key
+                value = c.results[key]
+                path = os.path.join(self.path, recipe.path, device_name)
+                ruleset = ruleset_factory.get_ruleset_with_name(recipe.ruleset)
+                if path in counts and counts[path] != len(ruleset.actions):
+                    logging.error('Skipping %s (incomplete results)',
+                                  device_name)
+                else:
+                    if path in results:
+                        results[path].append(value)
+                    else:
+                        if ruleset.header:
+                            results[path] = [ruleset.header, value]
+                        else:
+                            results[path] = [value]
+        return results
 
     def _write(self, trailing_newline=True):
         """Writes collection results to disk."""
-        for c in self._collections:
-            devices_with_errors = c.devices_with_errors
-            for result in sorted(c.results):
-                recipe, device_name, _ = result
-                if device_name in devices_with_errors:
-                    logging.error(
-                            '[%s] Skipping device %s; incomplete results for '
-                            'device', c.name, device_name)
-                    continue
-                else:
-                    try:
-                        our_path = os.path.join(self.path, recipe.path)
-                        if not os.path.exists(our_path):
-                            logging.warn('Creating directory %s', our_path)
-                            os.makedirs(our_path, mode=0750)
-
-                        filename = os.path.join(our_path, device_name)
-
-                        if filename in self._file_objects:
-                            f = self._file_objects[filename]
-                        else:
-                            f = open(filename, 'w')
-                            self._file_objects[filename] = f
-                            header = ruleset_factory.get_ruleset_with_name(
-                                recipe.ruleset).header
-                            if header:
-                                f.write(header + '\n')
-
-                        f.write(c.results[result])
-                    except (OSError, IOError, EOFError), e:
-                        logging.error('Failed writing %r. %s: %s', filename,
-                                      e.__class__.__name__, str(e))
-                        continue
+        results = self._collate()
+        self._file_objects = {}
+        for r in results:
+            try:
+                path = r[:r.rfind(os.path.sep)]
+                if not os.path.exists(path):
+                    logging.warn('Creating directory %s', path)
+                    os.makedirs(path, mode=0750)
+                f = self._file_objects.get(r)
+                if f is None:
+                    f = open(r, 'w')
+                    self._file_objects[r] = f
+                f.write('\n'.join(results[r]))
+            except (OSError, IOError, EOFError), e:
+                logging.error('Failed writing %r. %s: %s', filename,
+                              e.__class__.__name__, str(e))
+                continue
 
         # Close file objects and remove references to them.
         for f in self._file_objects.values():
@@ -197,4 +211,3 @@ class Collector(object):
                 f.close()
             except (OSError, IOError, EOFError):
                 continue
-        self._file_objects = {}
