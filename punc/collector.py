@@ -61,7 +61,7 @@ class Collector(object):
 
         # Set of files to exclude from the commit.
         self._exclusions = None
-        self.total_results = 0 
+        self.total_results = 0
 
         self._lock = threading.Lock()
         self._nc = notch_client
@@ -82,7 +82,7 @@ class Collector(object):
                 c = collection.Collection(name, recipes, path=self.path,
                                           notch_client=self._nc)
                 self._collections.append(c)
-           
+
     def collect(self):
         """Collects all collections in the supplied configuration."""
         if not self._lock.acquire(False):
@@ -158,7 +158,7 @@ class Collector(object):
                 else:
                     result_counts[path] = 1
         return result_counts
-              
+
     def _collate(self):
         results = {}
         removals = set()
