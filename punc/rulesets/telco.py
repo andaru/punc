@@ -25,7 +25,8 @@ class ParseConfiguration(parser.AddDropParser):
                re.compile(r'Building the configuration ....*'),
                re.compile(r'Current configuration:.*'),
                re.compile(r'Router Manager Configuration:.*'),
-               re.compile('Using [0-9].*'),
+               re.compile(r'Using [0-9].*'),
+               re.compile(r'.+No configuration change since last restart'),
                )
 
 
