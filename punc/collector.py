@@ -90,6 +90,10 @@ class Collector(object):
             self._lock.acquire()
         try:
             # Collect results.
+            if not self._collections:
+                logging.error('No work to do; specify a device, '
+                              'regexp or collection. See --help')
+                return
             for c in self._collections:
                 coll_start = time.time()
                 c.collect(filter=self.filter)
@@ -116,7 +120,7 @@ class Collector(object):
         if f is not None:
             if collection == f.collection:
                 return True
-            if f.collection is None:
+            if isinstance(f.collection, str) and f.collection == 'all':
                 return True
         return False
 

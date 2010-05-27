@@ -89,7 +89,8 @@ def get_options():
     p.add_option('-f', '--config', dest='config',
                  help='Configuration file name', default=None)
     p.add_option('-c', '--collection', dest='collection',
-                 help='Run only a specific named collection', default=None)
+                 help='Run only a specific named collection. "all" runs '
+                 'all collections', default=None)
     p.add_option('-n', '--device', dest='device',
                  help='Collect a specific device name only', default=None)
     p.add_option('-r', '--regexp', dest='regexp',
@@ -141,6 +142,13 @@ def main(argv=None):
         else:
             # Run the collection.
             logging.debug('Starting network device configuration backup')
+
+            if options.collection is None and (
+                options.device is not None or
+                options.regexp is not None):
+                # No collection supplied, so assume "all".
+                options.collection = 'all'
+                
             filter = collector.CollectorFilter(collection=options.collection,
                                                device=options.device,
                                                regexp=options.regexp)
