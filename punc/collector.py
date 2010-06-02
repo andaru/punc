@@ -29,10 +29,10 @@ import time
 
 import notch.client
 
-from punc.rulesets import cisco
-from punc.rulesets import dasan_nos
-from punc.rulesets import telco
-from punc.rulesets import timetra
+from rulesets import cisco
+from rulesets import dasan_nos
+from rulesets import telco
+from rulesets import timetra
 
 import collection
 import rc_hg
