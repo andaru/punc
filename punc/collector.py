@@ -36,19 +36,7 @@ from rulesets import timetra
 
 import collection
 import rc_hg
-
-
-# Device ruleset objects by vendor name.
-RULESETS = {'cisco': cisco.IosRuleSet,
-            'nos': dasan_nos.NosRuleSet,
-            'telco': telco.TelcoRuleSet,
-            'timetra': timetra.TimetraRuleSet,
-            }
-
-
-def get_ruleset_with_name(vendor_name):
-    """Returns the ruleset object for the vendor name."""
-    return RULESETS[vendor_name]
+import ruleset_factory
 
 
 class ConfigError(Exception):
@@ -190,7 +178,7 @@ class Collector(object):
                 recipe, device_name, result_order = key
                 value = c.results[key]
                 path = os.path.join(self.path, recipe.path, device_name)
-                ruleset = get_ruleset_with_name(recipe.ruleset)
+                ruleset = ruleset_factory.get_ruleset_with_name(recipe.ruleset)
                 if path in counts and counts[path] != len(ruleset.actions):
                     logging.error('Skipping %s (incomplete results)',
                                   device_name)
