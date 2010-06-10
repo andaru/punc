@@ -130,39 +130,41 @@ def main(argv=None):
     # Load the configuration.
     if config in config_path_options:
         logging.info('Loading default configuration file: %s', config)
-    config_dict = punc_config.get_config_from_file(config)
-    if config_dict:
-        # Setup notch client.
-        try:
-            nc = notch.client.Connection(agents)
-        except notch.client.NoAgentsError:
-            print ('Error: You must supply agents via -a or '
-                   'the NOTCH_AGENTS environment variable.')
-            return 1
-        else:
-            # Run the collection.
-            logging.debug('Starting network device configuration backup')
-
-            if options.collection is None and (
-                options.device is not None or
-                options.regexp is not None):
-                # No collection supplied, so assume "all".
-                options.collection = 'all'
-                
-            filter = collector.CollectorFilter(collection=options.collection,
-                                               device=options.device,
-                                               regexp=options.regexp)
-            logging.debug('Using %r', filter)
-            c = collector.Collector(nc, filter=filter, config=config_dict)
-            c.collect()
-            logging.debug('Finished in %.2f seconds',
-                          time.time() - start)
-            err_report = c.error_report()
-            if err_report is not None:
-                logging.error(err_report)
-    else:
-        print 'Error: No configuration loaded (see above for parse errors).'
+    try:
+        config_dict = punc_config.get_config_from_file(config)
+    except punc_config.Error, e:
+        logging.error('Error parsing configuration.')
+        logging.error('%s: %s', e.__class__.__name__, str(e))
         return 2
+
+    # Setup notch client.
+    try:
+        nc = notch.client.Connection(agents)
+    except notch.client.NoAgentsError:
+        print ('Error: You must supply agents via -a or '
+               'the NOTCH_AGENTS environment variable.')
+        return 1
+    else:
+        # Run the collection.
+        logging.debug('Starting network device configuration backup')
+
+        if options.collection is None and (
+            options.device is not None or
+            options.regexp is not None):
+            # No collection supplied, so assume "all".
+            options.collection = 'all'
+
+        filter = collector.CollectorFilter(collection=options.collection,
+                                           device=options.device,
+                                           regexp=options.regexp)
+        logging.debug('Using %r', filter)
+        c = collector.Collector(nc, filter=filter, config=config_dict)
+        c.collect()
+        logging.debug('Finished in %.2f seconds',
+                      time.time() - start)
+        err_report = c.error_report()
+        if err_report is not None:
+            logging.error(err_report)
 
 
 if __name__ == '__main__':

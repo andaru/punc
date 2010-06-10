@@ -256,6 +256,10 @@ class Collection(object):
             # Set completion status if we've received everything.
             if len(self._received_results) == len(self._outstanding_requests):
                 self._finished_collection.set()
+            # Remove reference to the received results to save memory.
+            del self._received_results
+            self._received_results = []
+
 
     def _add_error(self, device_name, action, error_msg):
         if device_name in self._errors:

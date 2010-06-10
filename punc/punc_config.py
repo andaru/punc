@@ -9,6 +9,10 @@ class Error(Exception):
     pass
 
 
+class RequiredAttributeMissingError(Error):
+    """A required attribute was missing from the configuration file."""
+
+
 class UnknownConfigurationFileFormatError(Error):
     """The configuration file extension was unknown."""
 
@@ -28,7 +32,15 @@ class Configuration(object):
         else:
             self.load_config()
             self.after_load_config()
-            self.loaded = True
+            if self.check_config():
+                self.loaded = True
+
+    def check_config(self):
+        if not self.config.get('base_path'):
+            raise RequiredAttributeMissingError(
+                'Configuration file missing `base_path` top-level attribute.')
+        else:
+            return True
 
     def after_load_config(self):
         pass

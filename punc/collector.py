@@ -177,6 +177,8 @@ class Collector(object):
             for key in sorted(c.results):
                 recipe, device_name, result_order = key
                 value = c.results[key]
+                if value.endswith('\n'):
+                    value = value[:-1]
                 path = os.path.join(self.path, recipe.path, device_name)
                 ruleset = ruleset_factory.get_ruleset_with_name(recipe.ruleset)
                 if path in counts and counts[path] != len(ruleset.actions):
@@ -195,31 +197,28 @@ class Collector(object):
     def _write(self, trailing_newline=True):
         """Writes collection results to disk."""
         results = self._collate()
-        # Remember file objects for reuse.
-        self._file_objects = {}
+        # Remember file objects for reuse during this method only.
+        file_objects = {}
         for r in results:
             try:
                 path = r[:r.rfind(os.path.sep)]
                 if not os.path.exists(path):
                     logging.warn('Creating directory %s', path)
                     os.makedirs(path, mode=0750)
-                f = self._file_objects.get(r)
+                f = file_objects.get(r)
                 if f is None:
                     f = open(r, 'w')
-                    self._file_objects[r] = f
-                # Strip trailing newlines in the blocks (to avoid additional
-                # newlines appearing in the output)
-                if results[r][-1].endswith('\n'):
-                    results[r][-1] = results[r][-1][:-1]
+                    file_objects[r] = f
                 # Write the output to the file object.
-                f.write('\n'.join(results[r]))
+                result_str = '\n'.join(results[r])
+                f.write(result_str)
             except (OSError, IOError, EOFError), e:
                 logging.error('Failed writing %r. %s: %s', filename,
                               e.__class__.__name__, str(e))
                 continue
 
-        # Close file objects and remove references to them.
-        for f in self._file_objects.values():
+        # Close files.
+        for f in file_objects.values():
             try:
                 if trailing_newline:
                     f.write('\n')
