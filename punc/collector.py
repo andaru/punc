@@ -195,6 +195,7 @@ class Collector(object):
     def _write(self, trailing_newline=True):
         """Writes collection results to disk."""
         results = self._collate()
+        # Remember file objects for reuse.
         self._file_objects = {}
         for r in results:
             try:
@@ -206,6 +207,11 @@ class Collector(object):
                 if f is None:
                     f = open(r, 'w')
                     self._file_objects[r] = f
+                # Strip trailing newlines in the blocks (to avoid additional
+                # newlines appearing in the output)
+                if results[r][-1].endswith('\n'):
+                    results[r][-1] = results[r][-1][:-1]
+                # Write the output to the file object.
                 f.write('\n'.join(results[r]))
             except (OSError, IOError, EOFError), e:
                 logging.error('Failed writing %r. %s: %s', filename,
