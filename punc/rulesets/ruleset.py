@@ -1,8 +1,17 @@
 
-import collections
+class Action(object):
+    """A Notch Action within a RuleSet."""
 
-Action = collections.namedtuple('Action',
-                                'notch_method args order parser parser_args')
+    def __init__(self, notch_method=None, args=None, order=None,
+                 parser=None, parser_args={}, output_file_suffix=None,
+                 binary_result=False):
+        self.notch_method = notch_method
+        self.args = args
+        self.order = order
+        self.parser = parser
+        self.parser_args = parser_args
+        self.output_file_suffix = output_file_suffix
+        self.binary_result = binary_result
 
 
 class RuleSet(object):
@@ -10,6 +19,7 @@ class RuleSet(object):
     actions = []
 
     # A string, the RANCID-CONTENT-TYPE header.
+    # Leave empty to avoid writing such a header line.
     header = ''
 
     def __init__(self):
@@ -20,7 +30,7 @@ class RuleSet(object):
         # _show_version = {'command': 'show version'}
         # _show_running = {'command': 'show running-config'}
         #
-        # actions = [
+        # self.actions = [
         #     ruleset.Action(notch_method='command', args=_show_version,
         #                    order='001', parser=self.parse_show_version,
         #                    parser_args={}),

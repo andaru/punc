@@ -18,13 +18,14 @@ class IgnoreResultError(Error):
 
 class Parser(object):
               
-    def __init__(self, input_text):
-        """Text parser object.
+    def __init__(self, input_data):
+        """Parser object.
 
         Args:
-          input_text: The input text as a string (w/embedded newlines).
+          input_data: The input as a 'text string' (w/embedded newlines).
         """
-        self.input = input_text.split('\n')
+        self._input_data = input_data
+        self.input = input_data.split('\n')
 
     def Parse(self):
         """Clients should call this method."""
@@ -36,7 +37,18 @@ class Parser(object):
         return '\n'.join(self.input)
 
 
+class NullParser(Parser):
+    """A do-nothing parser for binary results."""
+
+    def __init__(self, input_data):
+        self._input_data = input_data
+
+    def _Parse(self):
+        return self._input_data
+
+
 class AddDropParser(Parser):
+    """A text parser that allows lines to be kept or dropped based on regexp."""
 
     INC_RE = tuple()
     DROP_RE = tuple()
