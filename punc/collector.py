@@ -160,7 +160,7 @@ class Collector(object):
         result_counts = {}
         for c in self._collections:
             for key in sorted(c.results):
-                recipe, device_name, result_order = key
+                recipe, device_name, unused_order, unused_action = key
                 path = os.path.join(self.path, recipe.path, device_name)
                 if path in result_counts:
                     result_counts[path] += 1
@@ -169,29 +169,39 @@ class Collector(object):
         return result_counts
 
     def _collate(self):
+        """Collates results from collections."""
         results = {}
         removals = set()
         counts = self._result_counts()
 
         for c in self._collections:
             for key in sorted(c.results):
-                recipe, device_name, result_order = key
+                recipe, device_name, unused_order, action = key
+                # XXX check action for path suffixes, etc.
                 value = c.results[key]
-                if value.endswith('\n'):
+                if action.parser is not None and value.endswith('\n'):
+                    # We don't want additional newlines at the end of
+                    # parsed results.
                     value = value[:-1]
-                path = os.path.join(self.path, recipe.path, device_name)
+                if action.output_file_suffix is not None:
+                    path = os.path.join(self.path, recipe.path,
+                                        device_name + action.output_file_suffix)
+
+                else:
+                    path = os.path.join(self.path, recipe.path, device_name)
                 ruleset = ruleset_factory.get_ruleset_with_name(recipe.ruleset)
                 if path in counts and counts[path] != len(ruleset.actions):
                     logging.error('Skipping %s (incomplete results)',
                                   device_name)
                 else:
                     if path in results:
-                        results[path].append(value)
+                        results[path, action.binary_result].append(value)
                     else:
                         if ruleset.header:
-                            results[path] = [ruleset.header, value]
+                            results[path, action.binary_result] = [ruleset.header,
+                                                                   value]
                         else:
-                            results[path] = [value]
+                            results[path, action.binary_result] = [value]
         return results
 
     def _write(self, trailing_newline=True):
@@ -199,7 +209,7 @@ class Collector(object):
         results = self._collate()
         # Remember file objects for reuse during this method only.
         file_objects = {}
-        for r in results:
+        for r, binary in results:
             try:
                 path = r[:r.rfind(os.path.sep)]
                 if not os.path.exists(path):
@@ -208,9 +218,10 @@ class Collector(object):
                 f = file_objects.get(r)
                 if f is None:
                     f = open(r, 'w')
-                    file_objects[r] = f
+                    file_objects[r, binary] = f
                 # Write the output to the file object.
-                result_str = '\n'.join(results[r])
+                join_sep = ('', '\n')[int(binary)]
+                result_str = join_sep.join(results[r, binary])
                 f.write(result_str)
             except (OSError, IOError, EOFError), e:
                 logging.error('Failed writing %r. %s: %s', filename,
@@ -218,9 +229,10 @@ class Collector(object):
                 continue
 
         # Close files.
-        for f in file_objects.values():
+        for key, f in file_objects.iteritems():
+            _, binary = key
             try:
-                if trailing_newline:
+                if trailing_newline and not binary:
                     f.write('\n')
                 f.close()
             except (OSError, IOError, EOFError):

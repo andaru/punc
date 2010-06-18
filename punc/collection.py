@@ -228,11 +228,14 @@ class Collection(object):
                 # Result was OK.
                 # The result may still be an error, if the parser fails.
                 try:
-                    p = action.parser(r.result)
-                    parsed_result = p.Parse()
-                    # TODO(afort):
-                    # Detect a sequence response being a sequence of tuples of
-                    # (device_name, action.order, [lines])
+                    if action.parser is not None:
+                        p = action.parser(r.result)
+                        parsed_result = p.Parse()
+                        if parsed_result.endswith('\n'):
+                            parsed_result = parsed_result[:-1]
+                    else:
+                        # Results without a parser (e.g., binary file transfers)
+                        parsed_result = r.result
                 except parser.IgnoreResultError, e:
                     logging.debug('[%s] %s: Ignoring parser result.',
                                  self.name, device_name)
@@ -250,8 +253,8 @@ class Collection(object):
                                     '%s: %s' % (e.__class__.__name__, str(e)))
                 else:
                     # If we haven't exited due to error, set the result.
-                    self._results[(recipe, device_name, action.order)] = (
-                        parsed_result)
+                    self._results[(recipe, device_name,
+                                   action.order, action)] = parsed_result
         finally:
             # Set completion status if we've received everything.
             if len(self._received_results) == len(self._outstanding_requests):
@@ -260,8 +263,8 @@ class Collection(object):
             del self._received_results
             self._received_results = []
 
-
     def _add_error(self, device_name, action, error_msg):
+        """Records an error for later reporting."""
         if device_name in self._errors:
             self._errors[device_name].append((action, error_msg))
         else:
@@ -269,20 +272,24 @@ class Collection(object):
 
     @property
     def devices_with_errors(self):
+        """Returns a list of devices that had errors."""
         return self._errors.keys()
 
     @property
     def devices_without_errors(self):
+        """Returns a list of devices that did not have errors."""
         all = set(self._devices.keys())
         err = set(self._errors.keys())
         return list(all - err)
 
     @property
     def num_total_errors(self):
+        """Returns the number of errors in this collection."""
         i = 0
         for unused_dev, error_l in self._errors.items():
             i += len(error_l)
         return i
 
     def errors(self):
+        """Returns the errors dictionary."""
         return self._errors

@@ -1,10 +1,12 @@
+from rulesets import adva_fsp
 from rulesets import cisco
 from rulesets import dasan_nos
 from rulesets import telco
 from rulesets import timetra
 
 
-rulesets = {'cisco': cisco.IosRuleSet,
+rulesets = {'adva_fsp': adva_fsp.AdvaFspRuleSet,
+            'cisco': cisco.IosRuleSet,
             'nos': dasan_nos.NosRuleSet,
             'telco': telco.TelcoRuleSet,
             'timetra': timetra.TimetraRuleSet,
