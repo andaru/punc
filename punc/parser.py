@@ -1,7 +1,23 @@
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+#
+# Copyright 2010 Andrew Fort
+
+"""PUNC's library of text parsing routines."""
+
 import re
 
 
-BLANK_LINE = re.compile('^\s*$')
+BLANK_LINE = re.compile(r'^\s*$')
 
 
 class Error(Exception):
@@ -12,11 +28,12 @@ class DeviceReportedError(Error):
     """The device reports an error in its response."""
 
     
-class IgnoreResultError(Error):
+class SkipResult(Error):
     """The parser indicates that the result should be ignored."""
 
 
 class Parser(object):
+    """A PUNC parser."""
               
     def __init__(self, input_data):
         """Parser object.
@@ -27,11 +44,11 @@ class Parser(object):
         self._input_data = input_data
         self.input = input_data.split('\n')
 
-    def Parse(self):
+    def parse(self):
         """Clients should call this method."""
-        return self._Parse()
+        return self._parse()
 
-    def _Parse(self):
+    def _parse(self):
         """Subclasses should override this method to parse."""
         # Return what we were provided.
         return '\n'.join(self.input)
@@ -43,12 +60,12 @@ class NullParser(Parser):
     def __init__(self, input_data):
         self._input_data = input_data
 
-    def _Parse(self):
+    def _parse(self):
         return self._input_data
 
 
 class AddDropParser(Parser):
-    """A text parser that allows lines to be kept or dropped based on regexp."""
+    """A text parser that has keep ot drop lines based on regexps."""
 
     INC_RE = tuple()
     DROP_RE = tuple()
@@ -63,7 +80,7 @@ class AddDropParser(Parser):
     commented = False
     comment = ''
 
-    def _Parse(self):
+    def _parse(self):
         """Parses the text block."""
         result = []
         if self.commented:
@@ -77,8 +94,7 @@ class AddDropParser(Parser):
                 for re in self.IGNORE_RE:
                     m = re.search(line)
                     if m:
-                        raise IgnoreResultError('Ignored due to: %s' %
-                                                m.group(0))
+                        raise SkipResult(m.group(0))
             if self.flag_error:
                 for re in self.ERROR_RE:
                     m = re.search(line)
