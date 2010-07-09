@@ -14,11 +14,8 @@
 #
 # Copyright 2010 Andrew Fort
 
-"""PUNC: Pick Up (Your) Network Configuration.
+"""Utility functions used by PUNC."""
 
-punc attempts to be a flexible alternative to RANCID, whilst offering
-limited device support and an absolute minimum of command output yet.
-"""
 
 import curses
 import logging
@@ -26,11 +23,16 @@ import optparse
 import os
 import sys
 import time
+import traceback
 
 import notch.client
 
-import collector
-import punc_config
+import punc.model
+
+
+# Constants
+DEFAULT_COLLECT_TIMEOUT_S = 1750.0
+DEFAULT_COMMAND_TIMEOUT_S = 180.0
 
 
 # A modified (output) version of the formatter from Tornado.
@@ -89,8 +91,7 @@ def get_options():
     p.add_option('-f', '--config', dest='config',
                  help='Configuration file name', default=None)
     p.add_option('-c', '--collection', dest='collection',
-                 help='Run only a specific named collection. "all" runs '
-                 'all collections', default=None)
+                 help='Run only a specific named collection.', default=None)
     p.add_option('-n', '--device', dest='device',
                  help='Collect a specific device name only', default=None)
     p.add_option('-r', '--regexp', dest='regexp',
@@ -99,73 +100,91 @@ def get_options():
     return p.parse_args()
 
 
-def main(argv=None):
-    start = time.time()
-    argv = argv or sys.argv
-    options, arguments = get_options()
-    prettify_logging(options)
+def filter_devices(devices, vendor=None):
+    """Returns a set of the keys of the dict devices, filtered by vendor.
 
-    # Read the configuration file.
-    config_path_options = [os.path.join('/etc', 'punc.yaml'),
-                           os.path.join('/opt', 'local', 'etc', 'punc.yaml'),
-                           os.path.join('/usr', 'local', 'etc', 'punc.yaml'),
-                           os.path.join('/usr', 'local', 'etc',
-                                        'punc', 'punc.yaml'),
-                           ]
+    Args:
+      devices: A dictionary as retrieved from Notch's devices_info method.
+      vendor: A string or None. If a string, return only devices matching
+        this vendor. If None, perform no filtering.
 
-    if options.config:
-        config = options.config
-    else:
-        config = None
-        for config_path in config_path_options:
-            if os.path.exists(config_path):
-                config = config_path
-        if config is None:
-            logging.info('Error: No Punc configuration file found.')
-            sys.exit(0)
+    Returns:
+      A set of strings, hostnames matching the vendor provided.
+    """
+    result = set()
+    for d in devices.iterkeys():
+        if devices[d] is None or d is None:
+            logging.warning('filter_devices skipping bad device %r=%r',
+                            d, devices[d])
+            continue
+        if not vendor or devices[d].get('device_type') == vendor:
+            result.add(d)
+    return result
 
-    # Attempt to gather agent addresses from the environment.
-    agents = options.agents or os.getenv('NOTCH_AGENTS')
 
-    # Load the configuration.
-    if config in config_path_options:
-        logging.info('Loading default configuration file: %s', config)
+def get_devices(notch_client, device_regexp):
     try:
-        config_dict = punc_config.get_config_from_file(config)
-    except punc_config.Error, e:
-        logging.error('Error parsing configuration.')
+        return notch_client.devices_info(device_regexp)
+    except Exception, e:
+        logging.error('Notch Query error. Skipping this query. Details:')
         logging.error('%s: %s', e.__class__.__name__, str(e))
-        return 2
+        logging.debug('%s', traceback.format_exc())
+        return None
 
+
+def build_collections(options, config, notch_client):
+    base_path = config.get('base_path')
+    master_repo_path = config.get('master_repo_path')
+    _collections = config.get('collections')
+    command_timeout = config.get('command_timeout', DEFAULT_COMMAND_TIMEOUT_S)
+    collect_timeout = config.get('collect_timeout', DEFAULT_COLLECT_TIMEOUT_S)
+    collections = []
+
+    for name, recipes in _collections.iteritems():
+        logging.debug('Found collection %r (length %d)', name, len(recipes))
+        if len(recipes) > 1:
+            logging.error('Collection %r has more than one recipe')
+        
+        recipe = recipes[0]
+
+        if options.collection is not None and name != options.collection:
+            logging.debug('Collection name mismatch. Config: %s Found: %s',
+                          name, options.collection)
+            continue
+
+        device_regexp = recipe.get('regexp', r'^.*$')
+        _devices = get_devices(notch_client, device_regexp)
+        if not _devices:
+            logging.error('No devices found for recipe %r', name)
+            continue
+        else:
+            vendor = recipe.get('vendor')
+            ruleset = recipe.get('ruleset')
+            path = recipe.get('path') or ''
+
+            final_path = os.path.join(base_path, path)
+
+            devices = filter_devices(_devices, vendor=vendor)
+            recipe = punc.model.Recipe(
+                name=name, devices=devices, ruleset=ruleset)
+            collection = punc.collect.Collection(
+                recipe,
+                final_path,
+                notch_client,
+                command_timeout,
+                collect_timeout)
+            logging.debug('Adding %r', collection)
+            collections.append(collection)
+
+    return collections
+
+
+def get_notch_client(agents):   
     # Setup notch client.
     try:
         nc = notch.client.Connection(agents)
-    except notch.client.NoAgentsError:
-        print ('Error: You must supply agents via -a or '
-               'the NOTCH_AGENTS environment variable.')
-        return 1
+    except notch.client.client.NoAgentsError, e:
+        logging.error(str(e))
+        return None
     else:
-        # Run the collection.
-        logging.debug('Starting network device configuration backup')
-
-        if options.collection is None and (
-            options.device is not None or
-            options.regexp is not None):
-            # No collection supplied, so assume "all".
-            options.collection = 'all'
-
-        filter = collector.CollectorFilter(collection=options.collection,
-                                           device=options.device,
-                                           regexp=options.regexp)
-        logging.debug('Using %r', filter)
-        c = collector.Collector(nc, filter=filter, config=config_dict)
-        c.collect()
-        logging.debug('Finished in %.2f seconds',
-                      time.time() - start)
-        err_report = c.error_report()
-        if err_report is not None:
-            logging.error(err_report)
-
-
-if __name__ == '__main__':
-    sys.exit(main(sys.argv))
+        return nc

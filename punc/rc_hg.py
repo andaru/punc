@@ -123,12 +123,13 @@ class MercurialRevisionControl(object):
                           path, e.__class__.__name__, str(e))
 
     def _setup_mercurial_ignore(self):
+        """Creates the mercurial .hgignore file for the config repository."""
         try:
             f = open(os.path.join(self.local_path, '.hgignore'), 'w')
             f.write(self.HGIGNORE)
             f.close()
         except (OSError, IOError), e:
-            logging.error('Failed to write Mercirial ignore file %r. %s: %s',
+            logging.error('Failed to write Mercurial ignore file %r. %s: %s',
                           os.path.join(self.local_path, '.hgignore'),
                           e.__class__.__name__, str(e))
 
@@ -150,7 +151,9 @@ class MercurialRevisionControl(object):
                               '%s: %s', e.__class__.__name__, str(e))
                 raise SystemExit(2)
         finally:
-            self._ui.popbuffer()
+            buffer = self._ui.popbuffer()
+            if buffer:
+                logging.debug('Add Remove reuslts: %s', buffer)
 
     def _postcommit(self, unused_changed):
         """Actions to run after the Mercurial commit action."""
@@ -162,6 +165,7 @@ class MercurialRevisionControl(object):
         """Commits paths in the repository with an optional commit message."""
         self._ui.pushbuffer()
         try:
+            
             try:
                 (modified, added, removed, deleted, unused_unknown,
                  unused_ignored, unused_clean) = self._repo.status()
@@ -212,13 +216,21 @@ class MercurialRevisionControl(object):
                     message = '\n'.join(msg)
                     logging.info(message)
 
-                if paths:
-                    mercurial.commands.commit(
-                        self._ui, self._repo, paths,
-                        exclude=exclude, message=message)
-                else:
-                    mercurial.commands.commit(
-                        self._ui, self._repo, exclude=exclude, message=message)
+                try:
+                    if paths:
+                        mercurial.commands.commit(
+                            self._ui, self._repo, paths,
+                            exclude=exclude, message=message)
+                    else:
+                        mercurial.commands.commit(
+                            self._ui, self._repo, exclude=exclude,
+                            message=message)
+                except mercurial.error.Abort, e:
+                    logging.error('Error during commit. %s: %s',
+                                  e.__class__.__name__, str(e))
             self._postcommit(changes)
         finally:
-            self._ui.popbuffer()
+            buffer = self._ui.popbuffer()
+            if buffer:
+                logging.debug(buffer)
+        

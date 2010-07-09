@@ -12,58 +12,52 @@
 #
 # Copyright 2010 Andrew Fort
 
-"""Alcatel/Timetra TimOS collection rules."""
+"""PUNC Arbor PeakFlow/TMS/Collector Platform device module."""
 
 
 import re
 
 import punc.model
-
 import punc.parser
 
 
 COMMENT = '# '
 
 
-class ParseShowVersion(punc.parser.AddDropParser):
+class ParseSysHardware(punc.parser.AddDropParser):
+    """Parses "system hardware" output."""
 
     commented = True
     comment = COMMENT
 
     DROP_RE = (punc.parser.BLANK_LINE,
+               re.compile(r'^Boot time:'),
+               re.compile(r'^Load averages:'),
                )
 
 
-class ParseConfiguration(punc.parser.AddDropParser):
-    """Configuration parser."""
-
-    DROP_RE = (punc.parser.BLANK_LINE,
-               re.compile(r'^# Built on '),
-               re.compile(r'^# Generated [A-Z]'),
-               re.compile(r'^# All rights reserved. All use subject to '),
-               re.compile(r'^# TiMOS-'),
-               re.compile(r'^# Finished [A-Z]'),
-               )
+class ParseSysConfiguration(punc.parser.AddDropParser):
+    """Parses "system config show" output."""
 
 
-class TimetraRuleset(punc.model.Ruleset):
+class ArborRuleset(punc.model.Ruleset):
+    """Arbor OS ruleset for PUNC."""
 
-    name = 'timetra'
+    name = 'arbor'
 
-    cmd_show_version = {'command': 'show version'}
-    cmd_show_running = {'command': 'admin display-config'}
+    cmd_sys_hardware = {'command': 'system hardware'}
+    cmd_sys_config = {'command': 'system config show'}
 
-    header = '# RANCID-CONTENT-TYPE: timetra\n# '
+    header = '#RANCID-CONTENT-TYPE: arbor\n#\n'
 
     def rules(self):
         return [
             punc.model.Rule([punc.model.Action('command',
                                                key=(0, 0),
-                                               args=self.cmd_show_version,
-                                               parser=ParseShowVersion)]),
+                                               args=self.cmd_sys_hardware,
+                                               parser=ParseSysHardware)]),
             punc.model.Rule([punc.model.Action('command',
                                                key=(1, 0),
-                                               args=self.cmd_show_running,
-                                               parser=ParseConfiguration)]),
+                                               args=self.cmd_sys_config,
+                                               parser=ParseSysConfiguration)]),
             ]
-
