@@ -18,19 +18,13 @@ import setuptools
 
 setuptools.setup(
     name='punc',
-    version='0.1',
+    version='0.2',
     description='Pick Up Network (Device) Configuration',
     entry_points = {
         'console_scripts': [
-            'punc = punc.punc:main'
+            'punc = punc.main:main'
             ]
         },
-    #install_requires=['eventlet >= 0.9.6',
-                      #'ipaddr',
-                      #'mox',
-                      #'paramiko >= 1.7.6',
-                      #'PyYAML >= 3.0',
-                      #],
     url='http://code.google.com/p/punc/',
     author='Andrew Fort',
     author_email='notch-dev@googlegroups.com',
