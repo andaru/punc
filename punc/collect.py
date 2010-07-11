@@ -179,6 +179,7 @@ class Collection(object):
                 status, output = self._get_error_status_and_result(r, action)
         finally:
             self.device_finish(device_name)
+            rule.finish(status)
             result = punc.model.Result(rule, r, action.key,
                                        output=output, status=status)
             logging.debug('RESULT %s %s', r.arguments.get('device_name'),

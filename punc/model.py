@@ -118,7 +118,8 @@ class Result(object):
             return None
         else:
             try:
-                return '%s: %s' % (self.result.error[0], self.result.error[1])
+                return '%s: %s' % (self.result.error.args[0],
+                                   self.result.error.args[1])
             except:
                 return str(self.result.error)
 

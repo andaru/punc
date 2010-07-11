@@ -16,6 +16,7 @@
 
 
 import punc.rulesets.adva_fsp
+import punc.rulesets.arbor
 import punc.rulesets.cisco
 import punc.rulesets.dasan_nos
 import punc.rulesets.telco
@@ -23,6 +24,7 @@ import punc.rulesets.timetra
 
 
 RULESETS = (punc.rulesets.adva_fsp.AdvaFspRuleset,
+            punc.rulesets.arbor.ArborRuleset,
             punc.rulesets.cisco.IosRuleset,
             punc.rulesets.dasan_nos.NosRuleset,
             punc.rulesets.telco.TelcoRuleset,
