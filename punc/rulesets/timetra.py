@@ -53,7 +53,7 @@ class TimetraRuleset(punc.model.Ruleset):
     cmd_show_version = {'command': 'show version'}
     cmd_show_running = {'command': 'admin display-config'}
 
-    header = '# RANCID-CONTENT-TYPE: timetra\n# '
+    header = '# RANCID-CONTENT-TYPE: timetra\n#\n'
 
     def rules(self):
         return [

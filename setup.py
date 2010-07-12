@@ -16,19 +16,27 @@
 
 import setuptools
 
+
 setuptools.setup(
     name='punc',
     version='0.2',
     description='Pick Up Network (Device) Configuration',
+
     entry_points = {
         'console_scripts': [
             'punc = punc.main:main'
             ]
         },
+    
+    install_requires=['mercurial',
+                      'notch',
+                      ],
+
     url='http://code.google.com/p/punc/',
     author='Andrew Fort',
     author_email='notch-dev@googlegroups.com',
     license='http://www.apache.org/licenses/LICENSE-2.0',
+
     classifiers=['Development Status :: 2 - Pre-Alpha',
                  'Environment :: Console',
                  'Intended Audience :: System Administrators',
@@ -38,6 +46,7 @@ setuptools.setup(
                  'Topic :: System :: Networking :: Monitoring',
                  'Topic :: System :: Systems Administration',
                  ],
+
     packages = setuptools.find_packages(),
     test_suite='tests',
     zip_safe = True,
