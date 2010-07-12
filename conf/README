@@ -1,0 +1,14 @@
+Configuration files for punc have the basic theme that they
+lay out recipes of configuration collections. These recipes
+define devices that will have an action rule set, defined in code,
+executed against the device.  Results of these activities are
+parsed, and written to user defined paths.
+
+This allows one to produce a output directories much like the
+RANCID output, as can be seen in the file punc.yaml.standard,
+or output where different recipes in a collection go to
+the same directory (which is the default behaviour).
+
+File               Purpose
+------------------ ------------------------------------------
+punc-standard.yaml Emulate a RANCID tree and collection style

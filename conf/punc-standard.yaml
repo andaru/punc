@@ -1,0 +1,21 @@
+base_path: /tmp/punc-workdir/
+master_repo_path: /tmp/punc-master/
+collections:
+  default:
+    recipes:
+      - vendor: cisco
+        regexp: ".*"
+        ruleset: cisco
+        path: cisco/
+      - vendor: juniper
+        regexp: ".*"
+        ruleset: juniper
+        path: juniper/
+      - vendor: timetra
+        regexp: ".*"
+        ruleset: timetra
+        path: timetra/
+      - vendor: telco
+        regexp: ".*"
+        ruleset: telco
+        path: telco/
