@@ -39,7 +39,7 @@ class ParseShowVersion(punc.parser.AddDropParser):
                re.compile(r'^## '),               
                )
     INC_RE = (re.compile('^Model:', re.I),
-              re.compile('^JUNOS''),
+              re.compile('^JUNOS'),
               )
     ERROR_RE = ERRORS
 
