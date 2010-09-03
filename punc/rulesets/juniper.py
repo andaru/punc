@@ -12,48 +12,56 @@
 #
 # Copyright 2010 Andrew Fort
 
-"""Alcatel/Timetra TimOS collection rules."""
+"""PUNC Juniper JunOS device ruleset."""
 
 
 import re
 
 import punc.model
-
 import punc.parser
 
 
 COMMENT = '# '
 
+ERRORS = (
+    re.compile(
+        r'^error: syntax error'),
+    )
+
 
 class ParseShowVersion(punc.parser.AddDropParser):
+    """Parses "show version" output."""
 
     commented = True
     comment = COMMENT
 
     DROP_RE = (punc.parser.BLANK_LINE,
+               re.compile(r'^## '),               
                )
+    INC_RE = (re.compile('^Model:', re.I),
+              re.compile('^JUNOS''),
+              )
+    ERROR_RE = ERRORS
 
 
 class ParseConfiguration(punc.parser.AddDropParser):
-    """Configuration parser."""
+    """Parses "show config" output."""
 
     DROP_RE = (punc.parser.BLANK_LINE,
-               re.compile(r'^# Built on '),
-               re.compile(r'^# Generated [A-Z]'),
-               re.compile(r'^# All rights reserved. All use subject to '),
-               re.compile(r'^# TiMOS-'),
-               re.compile(r'^# Finished [A-Z]'),
+               re.compile(r'^## '),
                )
+    ERROR_RE = ERRORS
 
 
-class TimetraRuleset(punc.model.Ruleset):
+class JunosRuleset(punc.model.Ruleset):
+    """Juniper JunOS ruleset for PUNC."""
 
-    name = 'timetra'
+    name = 'juniper'
 
     cmd_show_version = {'command': 'show version'}
-    cmd_show_running = {'command': 'admin display-config'}
+    cmd_show_running = {'command': 'show config'}
 
-    header = '# RANCID-CONTENT-TYPE: timetra\n#\n'
+    header = '#RANCID-CONTENT-TYPE: juniper\n#\n'
 
     def rules(self):
         return [
