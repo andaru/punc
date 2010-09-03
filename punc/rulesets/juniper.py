@@ -48,7 +48,6 @@ class ParseConfiguration(punc.parser.AddDropParser):
     """Parses "show config" output."""
 
     DROP_RE = (punc.parser.BLANK_LINE,
-               re.compile(r'^## '),
                )
     ERROR_RE = ERRORS
 
