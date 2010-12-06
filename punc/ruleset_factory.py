@@ -40,7 +40,7 @@ rulesets = {}
 for ruleset in RULESETS:
     rulesets[ruleset.name] = ruleset
 
-    
+
 def get_ruleset(name):
     """Returns a ruleset object.
 
