@@ -22,7 +22,6 @@ import time
 import threading
 
 import notch.client
-import notch.client.errors
 
 import punc.model
 import punc.parser
@@ -92,24 +91,38 @@ class Collection(object):
         for request in ruleset.requests(self.recipe.devices):
             device_name = request.arguments.get('device_name')
             self.num_resp_target += 1
-            logging.debug('REQUEST_SENT %r', request)
-            gt = self._nc.exec_request(request, callback=self._notch_callback)
-            self.device_wait(device_name, gt)
+            self._nc.exec_request(request, callback=self._notch_callback)
+            self.device_start(device_name)
 
         elapsed = max(time.time() - self._start, 0)
         logging.info('[%s] %d requests sent in %.2fs',
                      self.recipe.name, self.num_resp_target, elapsed)
         self.completed_sending = True
 
-    def device_wait(self, device, gt):
+    def device_start(self, device):
+        flag = self._idle.get(device)
+        if flag is None:
+            logging.debug('DEVICE %s', device)
+            flag = threading.Event()
+            self._idle[device] = flag
+            flag.set()
+
         logging.debug('DEVICE_WAIT %s', device)
         start = time.time()
-        try:
-            gt.wait()
-        except Exception, e:
-            logging.error('DEVICE_ERROR %s: %s', e.__class__.__name__, str(e))
+        flag.wait(float(self.DEVICE_IDLE_TIMEOUT *
+                        self.DEVICE_IDLE_TIMEOUT_SAFETY_FACTOR))
         end = time.time()
         logging.debug('DEVICE_WAIT_DONE %s (%.2fs)', device, end-start)
+        if not flag.isSet():
+            logging.error('DEVICE_TIMEOUT %s (%.1fs)',
+                          device, self.DEVICE_IDLE_TIMEOUT)
+
+    def device_finish(self, device):
+        flag = self._idle.get(device)
+        if flag is not None:
+            logging.debug('DEVICE_FINISH %s', device)
+            flag.clear()
+            flag.set()
 
     def _get_error_status(self, rule):
         """Returns the rule status for of an errored result."""
@@ -148,7 +161,6 @@ class Collection(object):
     def _notch_callback(self, r, *args, **unused_kwargs):
         """Notch request callback."""
         self.num_resp_received += 1
-        logging.debug('REQUEST_CALLBACK %r', r)
         rule, action, target = args
         target = target or self._ruleset.target
         device_name = r.arguments.get('device_name')
@@ -167,7 +179,7 @@ class Collection(object):
             else:
                 status, output = self._get_error_status_and_result(r, action)
         finally:
-            logging.debug('DEVICE_FINISH %s', device_name)
+            self.device_finish(device_name)
             rule.finish(status)
             result = punc.model.Result(rule, r, action.key,
                                        output=output, status=status)
@@ -312,5 +324,3 @@ def error_report(errors):
             rep.append('    %s' % err)
         rep.append('')
     return '\n'.join(rep)
-
-
