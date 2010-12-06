@@ -165,7 +165,7 @@ class MercurialRevisionControl(object):
         """Commits paths in the repository with an optional commit message."""
         self._ui.pushbuffer()
         try:
-            
+
             try:
                 (modified, added, removed, deleted, unused_unknown,
                  unused_ignored, unused_clean) = self._repo.status()
@@ -233,4 +233,4 @@ class MercurialRevisionControl(object):
             buffer = self._ui.popbuffer()
             if buffer:
                 logging.debug(buffer)
-        
+
