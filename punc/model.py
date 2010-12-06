@@ -78,15 +78,15 @@ class Result(object):
 
     # Integer constants representing the value of the status attribute.
     # The result is not yet complete
-    STATUS_PENDING = 0  
+    STATUS_PENDING = 0
     # The request completed successfully and the result is OK
-    STATUS_OK = 1  
+    STATUS_OK = 1
     # The result is considered an error
-    STATUS_ERROR = 2  
+    STATUS_ERROR = 2
     # The result is not an error, but any result should not be
     # included in output.
     STATUS_IGNORE = 3
-    
+
     _STATUSES = {0: 'STATUS_PENDING',
                  1: 'STATUS_OK',
                  2: 'STATUS_ERROR',
@@ -118,10 +118,16 @@ class Result(object):
             return None
         else:
             try:
-                return '%s: %s' % (self.result.error.args[0],
-                                   self.result.error.args[1])
+                # ProtocolError can be both a string and a tuple....
+                if isinstance(self.result.error[0], tuple):
+                    (err_code, err_msg) = self.result.error[0]
+                    err_name = notch.client.errors.reverse_error_dictionary.get(
+                        err_code, 'Unknown error')
+                    return '%s: %s' % (err_name, err_msg)
+                else:
+                    return str(self.result.error)
             except:
-                return str(self.result.error)
+                    return str(self.result.error)
 
 
 class Rule(object):
