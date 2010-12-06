@@ -141,10 +141,10 @@ def build_collections(options, config, notch_client):
     collections = []
 
     for name, recipes in _collections.iteritems():
-        logging.debug('Found collection %r (length %d)', name, len(recipes))
+        logging.debug('Found collection %r', name)
         if len(recipes) > 1:
             logging.error('Collection %r has more than one recipe')
-        
+
         recipe = recipes[0]
 
         if options.collection is not None and name != options.collection:
@@ -179,7 +179,7 @@ def build_collections(options, config, notch_client):
     return collections
 
 
-def get_notch_client(agents):   
+def get_notch_client(agents):
     # Setup notch client.
     try:
         nc = notch.client.Connection(agents)
