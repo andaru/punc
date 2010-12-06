@@ -27,14 +27,14 @@ class Error(Exception):
 class DeviceReportedError(Error):
     """The device reports an error in its response."""
 
-    
+
 class SkipResult(Error):
     """The parser indicates that the result should be ignored."""
 
 
 class Parser(object):
     """A PUNC parser."""
-              
+
     def __init__(self, input_data):
         """Parser object.
 
@@ -107,7 +107,7 @@ class AddDropParser(Parser):
                         # Matched a drop line, so just skip it.
                         dropped = True
                         break
-                    
+
             if len(self.INC_RE) and self.flag_inc:
                 for re in self.INC_RE:
                     match = re.search(comment + line)
