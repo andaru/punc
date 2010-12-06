@@ -27,9 +27,10 @@ setuptools.setup(
             'punc = punc.main:main'
             ]
         },
-    
+
     install_requires=['mercurial',
-                      'notch',
+                      'notch.client',
+                      'PyYAML',
                       ],
 
     url='http://code.google.com/p/punc/',
