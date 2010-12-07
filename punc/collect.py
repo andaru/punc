@@ -14,7 +14,7 @@
 
 """PUNC's command/data collector."""
 
-
+import collections
 import logging
 import operator
 import os
@@ -52,12 +52,10 @@ class Collection(object):
         self.results = {}
         self.num_resp_target = 0
         self.num_resp_received = 0
-        self.completed_sending = False
         self._nc = notch_client
-        self._complete = threading.Event()
         self._target_cache = punc.model.TargetCache()
-        # Device idle flags
-        self._idle = {}
+        # Per device request deque
+        self._device_requests = {}
 
     def __repr__(self):
         return ('%s(recipe=%s, base_path=%s, command_timeout=%d, '
@@ -67,15 +65,11 @@ class Collection(object):
                  self.collection_timeout))
 
     @property
-    def completed(self):
-        return self._complete.isSet()
-
-    @property
     def name(self):
         return self.recipe.name
 
-    def collect(self):
-        """Executes the collection."""
+    def start(self):
+        """Starts the collection."""
         try:
             ruleset = punc.ruleset_factory.get_ruleset(self.recipe.ruleset)
             self._ruleset = ruleset
@@ -88,41 +82,24 @@ class Collection(object):
         self._start = time.time()
         logging.info('[%s] collection started for %d devices',
                      self.recipe.name, len(self.recipe.devices))
-        for request in ruleset.requests(self.recipe.devices):
-            device_name = request.arguments.get('device_name')
-            self.num_resp_target += 1
+
+        # Generate the per-device request deques
+        for device in self.recipe.devices:
+            self._device_requests[device] = collections.deque(
+                ruleset.requests(device))
+            self.num_resp_target += len(self._device_requests[device])
+
+        # Send the first request to kick things off, the callback
+        # continues the chain for the device.
+        for device in self.recipe.devices:
+            self._send_next_request(device)
+
+    def _send_next_request(self, device):
+        """Sends the next request for a device, if any."""
+        if self._device_requests[device]:
+            request = self._device_requests[device].popleft()
             self._nc.exec_request(request, callback=self._notch_callback)
-            self.device_start(device_name)
-
-        elapsed = max(time.time() - self._start, 0)
-        logging.info('[%s] %d requests sent in %.2fs',
-                     self.recipe.name, self.num_resp_target, elapsed)
-        self.completed_sending = True
-
-    def device_start(self, device):
-        flag = self._idle.get(device)
-        if flag is None:
-            logging.debug('DEVICE %s', device)
-            flag = threading.Event()
-            self._idle[device] = flag
-            flag.set()
-
-        logging.debug('DEVICE_WAIT %s', device)
-        start = time.time()
-        flag.wait(float(self.DEVICE_IDLE_TIMEOUT *
-                        self.DEVICE_IDLE_TIMEOUT_SAFETY_FACTOR))
-        end = time.time()
-        logging.debug('DEVICE_WAIT_DONE %s (%.2fs)', device, end-start)
-        if not flag.isSet():
-            logging.error('DEVICE_TIMEOUT %s (%.1fs)',
-                          device, self.DEVICE_IDLE_TIMEOUT)
-
-    def device_finish(self, device):
-        flag = self._idle.get(device)
-        if flag is not None:
-            logging.debug('DEVICE_FINISH %s', device)
-            flag.clear()
-            flag.set()
+            logging.debug('REQUEST_SENT %r', request)
 
     def _get_error_status(self, rule):
         """Returns the rule status for of an errored result."""
@@ -161,6 +138,7 @@ class Collection(object):
     def _notch_callback(self, r, *args, **unused_kwargs):
         """Notch request callback."""
         self.num_resp_received += 1
+        logging.debug('REQUEST_CALLBACK %r', r)
         rule, action, target = args
         target = target or self._ruleset.target
         device_name = r.arguments.get('device_name')
@@ -179,29 +157,31 @@ class Collection(object):
             else:
                 status, output = self._get_error_status_and_result(r, action)
         finally:
-            self.device_finish(device_name)
             rule.finish(status)
             result = punc.model.Result(rule, r, action.key,
                                        output=output, status=status)
             logging.debug('RESULT %s %s', r.arguments.get('device_name'),
                           result)
 
-            if target_inst in self.results:
-                self.results[target_inst].append(result)
-            else:
-                self.results[target_inst] = [result]
+            # Write the result to memory if we care about it.
+            if status != punc.model.Result.STATUS_IGNORE:
+                if target_inst in self.results:
+                    self.results[target_inst].append(result)
+                else:
+                    self.results[target_inst] = [result]
 
             # Are we there, yet?
             if self.finished():
-                self._complete.set()
                 elapsed = max(time.time() - self._start, 0)
                 logging.info('[%s] Completed collection in %.1fs',
                              self.recipe.name, elapsed)
-
+            else:
+                # Send the next request.
+                self._send_next_request(device_name)
+                
     def finished(self):
         """Returns True if this Collection is finished."""
-        return bool(self.completed_sending and
-                    self.num_resp_target == self.num_resp_received)
+        return bool(self.num_resp_received == self.num_resp_target)
 
     def devices_with_errors(self):
         """Returns a list with devices having errors during collcetion."""

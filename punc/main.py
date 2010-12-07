@@ -23,13 +23,14 @@ limited device support and an absolute minimum of command output yet.
 import logging
 import os
 import sys
-import time
 
 import punc.collect
 import punc.config
 import punc.model
 import punc.rc_hg
 import punc.util
+
+from eventlet.green import time
 
 
 def determine_config_file_path(options):
@@ -72,6 +73,17 @@ def write_error_report(path, report):
         f.close()
 
 
+def wait_running(nc):
+    """Wait for running eventlet greenthreads.
+
+    Eventlet sometimes has running greenthreads after waitall() returns.
+    This requires a greened time module (so as not to block the I/O loop).
+    """
+    while nc.num_requests_running:
+        nc.wait_all()
+        time.sleep(0.5)
+
+
 def main(argv=None):
     start = time.time()
     argv = argv or sys.argv
@@ -103,10 +115,11 @@ def main(argv=None):
     logging.info('Starting network element backup')
 
     for collection in collections:
-        collection.collect()
-    logging.debug('Collections done; waiting for remaining Notch callbacks.')
-    nc.wait_all()
+        collection.start()
 
+    logging.debug('Collections done; waiting for remaining Notch callbacks.')
+    wait_running(nc)
+    
     for collection in collections:
         collator.add_collection(collection)
     logging.debug('Collating and writing output')

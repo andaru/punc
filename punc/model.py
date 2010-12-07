@@ -226,41 +226,21 @@ class Ruleset(object):
     header = ''
 
     def __init__(self):
-        # Setup the generators now.
-        self._gens = [r.request_generator() for r in self.rules()]
-        self._done_gens = set()
         self.target = Target()
 
     def rules(self):
         """Returns a list of rules, over-ridden by concrete subclasses."""
         return []
 
-    def requests(self, devices):
-        """Generator for Notch Requests in the ruleset.
-
-        We iterate over each of the generators (which play out a
-        sequence). They will
-        """
-        while True:
-            for i in self._gens:
-                if i in self._done_gens:
-                    continue
-                try:
-                    for req in self._request_for_devices(i.next(), devices):
-                        yield req
-                except StopIteration:
-                    self._done_gens.add(i)
-                    continue
-            if len(self._gens) == len(self._done_gens):
-                return
-
-    def _request_for_devices(self, request, devices):
-        requests = set()
-        for d in devices:
-            r = copy.copy(request)
-            r.arguments['device_name'] = d
-            requests.add(r)
-        return requests
+    def requests(self, device):
+        """Returns all requests in the Ruleset for an individual device."""
+        req_list = []
+        for rule in self.rules():
+            for request in rule.request_list():
+                r = copy.copy(request)
+                r.arguments['device_name'] = device
+                req_list.append(r)
+        return req_list
 
 
 class Target(object):
