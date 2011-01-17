@@ -19,7 +19,7 @@ import setuptools
 
 setuptools.setup(
     name='punc',
-    version='0.2.1',
+    version='0.2.2',
     description='Pick Up Network (Device) Configuration',
 
     entry_points = {
