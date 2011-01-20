@@ -36,6 +36,8 @@ class ParseConfiguration(punc.parser.AddDropParser):
                re.compile(r'^Preparing to Display Configuration\.\.'),
                re.compile(r'^# (MON|TUE|WED|THU|FRI|SAT|SUN) [A-Z]+'),
                )
+    SUBST_RE = ((re.compile(r'(^# Slot.+) CF=.+$'), r'\1'),
+                )
     ERROR_RE = ERRORS
 
 
