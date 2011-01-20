@@ -65,18 +65,23 @@ class NullParser(Parser):
 
 
 class AddDropParser(Parser):
-    """A text parser that has keep ot drop lines based on regexps."""
+    """A text parser that has keep to drop lines based on regexps.
+
+    Also allows for substitutions for trimming noisy/unwanted output.
+    """
 
     INC_RE = tuple()
     DROP_RE = tuple()
     IGNORE_RE = tuple()
     ERROR_RE = tuple()
+    SUBST_RE = tuple()
 
     flag_drop = True
     flag_inc = True
     flag_ignore = True
     flag_error = True
     flag_trailing_blank = True
+    flag_substitute = True
     commented = False
     comment = ''
 
@@ -91,27 +96,31 @@ class AddDropParser(Parser):
         for line in self.input:
             dropped = False
             if self.flag_ignore:
-                for re in self.IGNORE_RE:
-                    m = re.search(line)
+                for reg in self.IGNORE_RE:
+                    m = reg.search(line)
                     if m:
                         raise SkipResult(m.group(0))
             if self.flag_error:
-                for re in self.ERROR_RE:
-                    m = re.search(line)
+                for reg in self.ERROR_RE:
+                    m = reg.search(line)
                     if m:
                         raise DeviceReportedError('Error from device: %s' %
                                                   m.group(0))
             if self.flag_drop:
-                for re in self.DROP_RE:
-                    if re.search(line):
+                for reg in self.DROP_RE:
+                    if reg.search(line):
                         # Matched a drop line, so just skip it.
                         dropped = True
                         break
 
+            if self.flag_substitute:
+                for (reg, repl) in self.SUBST_RE:
+                    line = reg.sub(repl, line)
+                    
             if len(self.INC_RE) and self.flag_inc:
-                for re in self.INC_RE:
-                    match = re.search(comment + line)
-                    if match:
+                for reg in self.INC_RE:
+                    m = reg.search(comment + line)
+                    if m:
                         result.append(comment + line)
             elif not dropped:
                 if line:
