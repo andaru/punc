@@ -23,6 +23,7 @@ import punc.rulesets.juniper
 import punc.rulesets.netscreen
 import punc.rulesets.nortel_bay
 import punc.rulesets.nortel_esr
+import punc.rulesets.nortel_esu
 import punc.rulesets.omniswitch
 import punc.rulesets.telco
 import punc.rulesets.timetra
@@ -34,6 +35,7 @@ RULESETS = (punc.rulesets.adva_fsp.AdvaFspRuleset,
             punc.rulesets.netscreen.NetscreenRuleset,
             punc.rulesets.nortel_bay.NortelBayRuleset,
             punc.rulesets.nortel_esr.NortelEsrRuleset,
+            punc.rulesets.nortel_esu.NortelEsuRuleset,
             punc.rulesets.omniswitch.OmniswitchRuleset,
             punc.rulesets.juniper.JunosRuleset,
             punc.rulesets.dasan_nos.NosRuleset,
